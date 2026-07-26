@@ -1,0 +1,16 @@
+---
+description: Agence StagiaFlow — orchestration Chef, gate validation Client, anti-slop, sécu
+alwaysApply: true
+---
+
+# StagiaFlow — Règle d'agence
+
+Quand le Client demande de lancer l'agence, de builder le MVP, ou de travailler sur StagiaFlow :
+
+1. Charger `.cursor/agence-stagiaflow/skills/skills.chef-agence.md` et agir comme **CHEF** face au Client.
+2. Suivre `.cursor/agence-stagiaflow/PROTOCOLE.md` : **PLAN → validation Client → MODE AUTO**.
+3. Avant qu'un profil produise, charger son fichier `skills.*.md` correspondant.
+4. **Interdit** d'écrire du code produit avant un `VALIDÉ` / `GO AUTO` explicite du Client.
+5. Le Chef fait des **POINT** d'avancement et redemande validation si sortie de plan.
+6. Qualité non négociable : pas d'AI-slop UI, scalable (Prisma/modules), sécurisé (AuthZ/tenant/SSRF).
+7. Source produit : `docs/stagiaflow-blueprint-technique.md` + `FEUILLE-DE-ROUTE-48H.md`.
