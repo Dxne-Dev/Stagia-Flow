@@ -1,0 +1,120 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  COMPANY_ADMIN
+  INTERN
+}
+
+enum StudyLevel {
+  LICENCE
+  MASTER
+  DOCTORAT
+  AUTRE
+}
+
+enum InternStatus {
+  ACTIVE
+  INVITED
+  INACTIVE
+}
+
+enum ProjectStatus {
+  DRAFT
+  VALIDATED
+  ARCHIVED
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  name         String?
+  passwordHash String?
+  role         Role
+  companyId    String?
+  internId     String?  @unique
+  company      Company? @relation("CompanyAdmins", fields: [companyId], references: [id], onDelete: Cascade)
+  intern       Intern?  @relation(fields: [internId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([companyId])
+}
+
+model Company {
+  id           String    @id @default(uuid())
+  name         String
+  sector       String?
+  website      String?
+  description  String?
+  vision       String?
+  activities   String[]
+  pastProjects String[]
+  admins       User[]    @relation("CompanyAdmins")
+  sessions     Session[]
+  interns      Intern[]
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model Session {
+  id          String     @id @default(uuid())
+  companyId   String
+  company     Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  level       StudyLevel
+  title       String
+  description String?
+  interns     Intern[]
+  projects    Project[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([companyId])
+}
+
+model Intern {
+  id             String       @id @default(uuid())
+  companyId      String
+  company        Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sessionId      String?
+  session        Session?     @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  user           User?
+  email          String       @unique
+  firstName      String
+  lastName       String
+  school         String?
+  level          StudyLevel?
+  startDate      DateTime?
+  endDate        DateTime?
+  status         InternStatus @default(INVITED)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([companyId])
+  @@index([companyId, sessionId])
+}
+
+model Project {
+  id           String        @id @default(uuid())
+  sessionId    String
+  session      Session       @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  title        String
+  context      String
+  objectives   String[]
+  deliverables String[]
+  skills       String[]
+  startDate    DateTime?
+  deadline     DateTime?
+  durationDays Int?
+  status       ProjectStatus @default(DRAFT)
+  generatedAt  DateTime      @default(now())
+  modifiedAt   DateTime      @updatedAt
+
+  @@index([sessionId])
+}
