@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   name text NOT NULL,
   academic_level text NOT NULL CHECK (academic_level IN ('licence', 'master', 'doctorat')),
   department text,
-  invite_token text UNIQUE DEFAULT encode(gen_random_bytes(16), 'hex'),
+  invite_token text UNIQUE DEFAULT replace(gen_random_uuid()::text, '-', ''),
   created_at timestamptz DEFAULT now()
 );
 

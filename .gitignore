@@ -11,6 +11,8 @@ node_modules
 dist
 dist-ssr
 *.local
+.env
+.env.example
 
 # Editor directories and files
 .vscode/*
@@ -22,3 +24,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+.next/
+supabase/.temp/
+log.md
+next-env.d.ts
+landing.md
