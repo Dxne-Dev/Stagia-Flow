@@ -37,22 +37,40 @@ export default function ProjectsPage() {
   const [selectedSession, setSelectedSession] = React.useState<string>('')
   const [expandedId, setExpandedId] = React.useState<string | null>(null)
   const [genError, setGenError] = React.useState<string | null>(null)
+  const [page, setPage] = React.useState(0)
+  const [hasMore, setHasMore] = React.useState(true)
+  const PAGE_SIZE = 20
 
-  const load = React.useCallback(async () => {
+  const load = React.useCallback(async (pageNum: number) => {
     if (authLoading) return
     if (!profile?.organization_id) { setLoading(false); return }
-    const [projRes, sessRes] = await Promise.all([
-      supabase.from('projects').select('*, sessions(name, academic_level)').in('session_id',
-        (await supabase.from('sessions').select('id').eq('organization_id', profile.organization_id)).data?.map(s => s.id) ?? []
-      ).order('created_at', { ascending: false }),
-      supabase.from('sessions').select('*').eq('organization_id', profile.organization_id),
-    ])
-    setProjects((projRes.data ?? []) as ProjectWithSession[])
+    const sessRes = await supabase.from('sessions').select('*').eq('organization_id', profile.organization_id)
+    const sessionIds = sessRes.data?.map(s => s.id) ?? []
+    const from = pageNum * PAGE_SIZE
+    const to = from + PAGE_SIZE - 1
+    const projRes = await supabase
+      .from('projects')
+      .select('*, sessions(name, academic_level)', { count: 'exact', head: false })
+      .in('session_id', sessionIds)
+      .order('created_at', { ascending: false })
+      .range(from, to)
+    if (pageNum === 0) {
+      setProjects((projRes.data ?? []) as ProjectWithSession[])
+    } else {
+      setProjects(prev => [...prev, ...(projRes.data ?? []) as ProjectWithSession[]])
+    }
     setSessions(sessRes.data ?? [])
+    setHasMore(projRes.count != null && (pageNum + 1) * PAGE_SIZE < projRes.count)
     setLoading(false)
   }, [profile, authLoading])
 
-  React.useEffect(() => { load() }, [load])
+  React.useEffect(() => { load(0) }, [load])
+
+  const handleLoadMore = () => {
+    const nextPage = page + 1
+    setPage(nextPage)
+    load(nextPage)
+  }
 
   const handleGenerate = async () => {
     if (!selectedSession || !profile?.organization_id) return
@@ -251,6 +269,12 @@ export default function ProjectsPage() {
               </Card>
             )
           })}
+        </div>
+      )}
+
+      {hasMore && projects.length > 0 && (
+        <div className="flex justify-center">
+          <Button variant="outline" onClick={handleLoadMore}>Voir plus</Button>
         </div>
       )}
     </div>

@@ -25,7 +25,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .select('*')
       .eq('id', userId)
       .maybeSingle()
-    setProfile(data)
+    if (data) {
+      setProfile(data)
+    } else {
+      const { data: newProfile } = await supabase
+        .from('user_profiles')
+        .insert({ id: userId, role: 'admin' })
+        .select()
+        .maybeSingle()
+      setProfile(newProfile ?? null)
+    }
   }, [])
 
   const refreshProfile = React.useCallback(async () => {

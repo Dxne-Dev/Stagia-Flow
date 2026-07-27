@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -19,6 +19,8 @@ type FormValues = z.infer<typeof schema>
 
 export default function LoginPage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const redirectTo = searchParams.get('redirect') || '/dashboard'
   const [error, setError] = React.useState<string | null>(null)
   const [loading, setLoading] = React.useState(false)
 
@@ -36,7 +38,7 @@ export default function LoginPage() {
         password: values.password,
       })
       if (signInError) throw signInError
-      navigate('/dashboard')
+      navigate(redirectTo)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Identifiants invalides')
     } finally {
@@ -99,7 +101,7 @@ export default function LoginPage() {
               </Button>
               <p className="text-center text-sm text-muted-foreground">
                 Pas encore de compte ?{' '}
-                <Link to="/signup" className="text-primary underline-offset-4 hover:underline">
+                <Link to={`/signup${redirectTo !== '/dashboard' ? `?redirect=${redirectTo}` : ''}`} className="text-primary underline-offset-4 hover:underline">
                   Créer un compte
                 </Link>
               </p>

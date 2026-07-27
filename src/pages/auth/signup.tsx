@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -20,6 +20,8 @@ type FormValues = z.infer<typeof schema>
 
 export default function SignupPage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const redirectTo = searchParams.get('redirect') || ''
   const [error, setError] = React.useState<string | null>(null)
   const [loading, setLoading] = React.useState(false)
 
@@ -32,20 +34,13 @@ export default function SignupPage() {
     setError(null)
     setLoading(true)
     try {
-      const { data, error: signUpError } = await supabase.auth.signUp({
+      const { error: signUpError } = await supabase.auth.signUp({
         email: values.email,
         password: values.password,
+        options: { data: { full_name: values.fullName } },
       })
       if (signUpError) throw signUpError
-
-      if (data.user) {
-        await supabase.from('user_profiles').insert({
-          id: data.user.id,
-          full_name: values.fullName,
-          role: 'admin',
-        })
-      }
-      navigate('/onboarding')
+      navigate(`/confirm-email${redirectTo ? `?redirect=${redirectTo}` : ''}`)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Une erreur est survenue')
     } finally {
@@ -119,7 +114,7 @@ export default function SignupPage() {
               </Button>
               <p className="text-center text-sm text-muted-foreground">
                 Déjà un compte ?{' '}
-                <Link to="/login" className="text-primary underline-offset-4 hover:underline">
+                <Link to={`/login${redirectTo ? `?redirect=${redirectTo}` : ''}`} className="text-primary underline-offset-4 hover:underline">
                   Se connecter
                 </Link>
               </p>

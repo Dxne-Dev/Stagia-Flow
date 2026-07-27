@@ -10,6 +10,7 @@ import {
   LogOut,
   ChevronDown,
   Briefcase,
+  FileText,
 } from 'lucide-react'
 import {
   Sidebar,
@@ -40,8 +41,10 @@ interface NavItem {
 const managerNav: NavItem[] = [
   { title: 'Tableau de bord', url: '/dashboard', icon: LayoutDashboard },
   { title: 'Organisation', url: '/organization', icon: Building2 },
-  { title: 'Sessions', url: '/sessions', icon: Users },
+  { title: 'Stagiaires', url: '/stagiaires', icon: Users },
+  { title: 'Sessions', url: '/sessions', icon: FolderKanban },
   { title: 'Projets', url: '/projects', icon: FolderKanban },
+  { title: 'Livrables', url: '/deliverables', icon: FileText },
 ]
 
 const stagiaireNav: NavItem[] = [

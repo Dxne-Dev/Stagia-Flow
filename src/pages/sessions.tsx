@@ -26,16 +26,37 @@ export default function SessionsPage() {
   const [creating, setCreating] = React.useState(false)
   const [form, setForm] = React.useState({ name: '', academic_level: 'master' as AcademicLevel, department: '' })
   const [copied, setCopied] = React.useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = React.useState<string | null>(null)
+  const [page, setPage] = React.useState(0)
+  const [hasMore, setHasMore] = React.useState(true)
+  const PAGE_SIZE = 20
 
-  const load = React.useCallback(async () => {
+  const load = React.useCallback(async (pageNum: number) => {
     if (authLoading) return
     if (!profile?.organization_id) { setLoading(false); return }
-    const { data } = await supabase.from('sessions').select('*').eq('organization_id', profile.organization_id).order('created_at', { ascending: false })
-    setSessions(data ?? [])
+    const from = pageNum * PAGE_SIZE
+    const to = from + PAGE_SIZE - 1
+    const { data, count } = await supabase
+      .from('sessions').select('*', { count: 'exact', head: false })
+      .eq('organization_id', profile.organization_id)
+      .order('created_at', { ascending: false })
+      .range(from, to)
+    if (pageNum === 0) {
+      setSessions(data ?? [])
+    } else {
+      setSessions(prev => [...prev, ...(data ?? [])])
+    }
+    setHasMore(count != null && (pageNum + 1) * PAGE_SIZE < count)
     setLoading(false)
   }, [profile, authLoading])
 
-  React.useEffect(() => { load() }, [load])
+  React.useEffect(() => { load(0) }, [load])
+
+  const handleLoadMore = () => {
+    const nextPage = page + 1
+    setPage(nextPage)
+    load(nextPage)
+  }
 
   const handleCreate = async () => {
     if (!profile?.organization_id || !form.name) return
@@ -60,9 +81,13 @@ export default function SessionsPage() {
   }
 
   const handleDelete = async (id: string) => {
+    if (deleteTarget !== id) return
     await supabase.from('sessions').delete().eq('id', id)
     setSessions(prev => prev.filter(s => s.id !== id))
+    setDeleteTarget(null)
   }
+
+  const confirmDelete = (id: string) => setDeleteTarget(id)
 
   if (loading) return (
     <div className="flex flex-col gap-4">
@@ -166,7 +191,7 @@ export default function SessionsPage() {
                       {copied === session.invite_token ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
                       {copied === session.invite_token ? 'Copié' : 'Copier le lien'}
                     </Button>
-                    <Button variant="ghost" size="icon" onClick={() => handleDelete(session.id)}>
+                    <Button variant="ghost" size="icon" onClick={() => confirmDelete(session.id)}>
                       <Trash2 className="size-4 text-destructive" />
                     </Button>
                   </div>
@@ -176,6 +201,27 @@ export default function SessionsPage() {
           })}
         </div>
       )}
+
+      {hasMore && sessions.length > 0 && (
+        <div className="flex justify-center">
+          <Button variant="outline" onClick={handleLoadMore}>Voir plus</Button>
+        </div>
+      )}
+
+      <Dialog open={deleteTarget !== null} onOpenChange={o => { if (!o) setDeleteTarget(null) }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Supprimer cette session ?</DialogTitle>
+            <DialogDescription>
+              Cette action est irréversible. Les projets et stagiaires liés à cette session seront également supprimés.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteTarget(null)}>Annuler</Button>
+            <Button variant="destructive" onClick={() => deleteTarget && handleDelete(deleteTarget)}>Supprimer</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

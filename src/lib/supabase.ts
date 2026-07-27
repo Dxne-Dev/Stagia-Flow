@@ -5,6 +5,18 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
+export async function uploadDeliverable(file: File, userId: string): Promise<string> {
+  const ext = file.name.split('.').pop() ?? 'bin'
+  const path = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
+  const { error } = await supabase.storage.from('deliverables').upload(path, file, {
+    cacheControl: '3600',
+    upsert: false,
+  })
+  if (error) throw error
+  const { data: { publicUrl } } = supabase.storage.from('deliverables').getPublicUrl(path)
+  return publicUrl
+}
+
 export type AcademicLevel = 'licence' | 'master' | 'doctorat'
 export type UserRole = 'admin' | 'manager' | 'stagiaire'
 export type ProjectStatus = 'draft' | 'active' | 'archived'
@@ -36,6 +48,7 @@ export interface UserProfile {
   session_id: string | null
   role: UserRole
   full_name: string | null
+  email: string | null
   created_at: string
 }
 

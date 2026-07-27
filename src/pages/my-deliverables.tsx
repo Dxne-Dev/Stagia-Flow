@@ -1,6 +1,6 @@
 import * as React from 'react'
-import { Plus, Upload, FileText, Link2, CheckCircle2, Clock, XCircle, AlertCircle } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { Plus, Upload, FileText, Link2, CheckCircle2, Clock, XCircle, AlertCircle, Loader2 } from 'lucide-react'
+import { supabase, uploadDeliverable } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth-context'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -31,6 +31,8 @@ export default function MyDeliverablesPage() {
   const [open, setOpen] = React.useState(false)
   const [submitting, setSubmitting] = React.useState(false)
   const [form, setForm] = React.useState({ project_id: '', file_url: '', notes: '' })
+  const [file, setFile] = React.useState<File | null>(null)
+  const [uploading, setUploading] = React.useState(false)
 
   const load = React.useCallback(async () => {
     if (!user || !profile?.session_id) { setLoading(false); return }
@@ -46,17 +48,30 @@ export default function MyDeliverablesPage() {
   React.useEffect(() => { load() }, [load])
 
   const handleSubmit = async () => {
-    if (!user || !form.project_id || (!form.file_url && !form.notes)) return
+    if (!user || !form.project_id || (!form.file_url && !form.notes && !file)) return
     setSubmitting(true)
+    setUploading(true)
+    let fileUrl = form.file_url || null
+    if (file) {
+      try {
+        fileUrl = await uploadDeliverable(file, user.id)
+      } catch {
+        setUploading(false)
+        setSubmitting(false)
+        return
+      }
+    }
     await supabase.from('deliverables').insert({
       project_id: form.project_id,
       user_id: user.id,
-      file_url: form.file_url || null,
+      file_url: fileUrl,
       notes: form.notes || null,
     })
     setForm({ project_id: '', file_url: '', notes: '' })
+    setFile(null)
     setOpen(false)
     setSubmitting(false)
+    setUploading(false)
     await load()
   }
 
@@ -96,7 +111,7 @@ export default function MyDeliverablesPage() {
               <Upload className="size-4" />
               Soumettre un livrable
             </DialogTitle>
-            <DialogDescription>Ajoutez un lien ou une note pour votre livrable</DialogDescription>
+            <DialogDescription>Ajoutez un fichier, un lien ou une note pour votre livrable</DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-4 py-2">
             <Field>
@@ -110,6 +125,26 @@ export default function MyDeliverablesPage() {
                 {projects.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
               </select>
             </Field>
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground">Fichier (optionnel)</p>
+              <label className="flex items-center gap-2 rounded-md border border-input px-3 py-2 text-sm cursor-pointer hover:bg-accent transition-colors">
+                <Upload className="size-4 text-muted-foreground" />
+                <span className="text-muted-foreground truncate flex-1">
+                  {file ? file.name : 'Choisir un fichier (PDF, Word, PowerPoint, Excel, image…)'}
+                </span>
+                <input
+                  type="file"
+                  accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.webp,.txt,.zip"
+                  onChange={e => setFile(e.target.files?.[0] ?? null)}
+                  className="hidden"
+                />
+              </label>
+              <p className="text-[10px] text-muted-foreground">Taille max : 10 Mo</p>
+            </div>
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center"><span className="w-full border-t" /></div>
+              <span className="relative flex justify-center text-xs text-muted-foreground bg-background px-2">ou un lien</span>
+            </div>
             <Field>
               <FieldLabel htmlFor="file_url">URL du livrable</FieldLabel>
               <div className="relative">
@@ -136,8 +171,8 @@ export default function MyDeliverablesPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>Annuler</Button>
-            <Button onClick={handleSubmit} disabled={submitting || !form.project_id || (!form.file_url && !form.notes)}>
-              {submitting ? 'Envoi…' : 'Soumettre'}
+            <Button onClick={handleSubmit} disabled={submitting || !form.project_id || (!form.file_url && !form.notes && !file)}>
+              {uploading ? <><Loader2 className="size-4 mr-1 animate-spin" /> Upload…</> : submitting ? 'Envoi…' : 'Soumettre'}
             </Button>
           </DialogFooter>
         </DialogContent>
