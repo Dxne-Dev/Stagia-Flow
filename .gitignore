@@ -1,0 +1,59 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+.env
+
+# Bolt.new editor metadata
+.bolt/
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+.next/
+supabase/.temp/
+log.md
+next-env.d.ts
+landing.md
+
+# AI skills & config
+.agents/
+.claude/
+skills-lock.json
+
+# Design references
+DESIGN-MD/
+
+# Documentation / specs (LLM-generated, not source code)
+background.md
+login-and-signup-style.md
+
+# Vendor SVG assets (not referenced in source)
+public/svg/
+
+# Dev utility scripts
+scripts/
+
+# Generated assets
+public/logo-showcase.html
+public/logos/
+
+# svgls CLI config
+svgls.json
