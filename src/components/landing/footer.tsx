@@ -48,7 +48,7 @@ export default function LandingFooter() {
               <ul className="space-y-2">
                 {s.links.map(l => (
                   <li key={l.label}>
-                    <a href={l.href} className="text-sm text-muted-foreground/70 transition-colors hover:text-foreground">
+                    <a href={l.href} className="text-sm text-muted-foreground transition-colors hover:text-foreground">
                       {l.label}
                     </a>
                   </li>

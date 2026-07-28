@@ -82,13 +82,15 @@ export const StickyScroll = ({
               <button
                 key={i}
                 onClick={() => setActiveCard(i)}
-                className={`h-1.5 rounded-full transition-all duration-300 ${
+                className="flex items-center justify-center min-h-[44px] min-w-[44px]"
+                aria-label={`Voir l'étape ${i + 1}`}
+              >
+                <span className={`h-1.5 rounded-full transition-all duration-300 ${
                   i === activeCard
                     ? 'w-6 bg-foreground'
                     : 'w-1.5 bg-muted-foreground/30 hover:bg-muted-foreground/50'
-                }`}
-                aria-label={`Voir l'étape ${i + 1}`}
-              />
+                }`} />
+              </button>
             ))}
           </div>
         </div>
