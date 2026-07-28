@@ -1,4 +1,5 @@
 
+import { LogoIcon } from '@/components/ui/logo-icon'
 
 const sections = [
   {
@@ -35,7 +36,7 @@ export default function LandingFooter() {
           <div>
             <div className="flex items-center gap-2">
               <div className="flex size-7 items-center justify-center rounded-md bg-primary">
-                <span className="text-xs font-bold text-primary-foreground">SP</span>
+                <LogoIcon className="size-full object-contain" />
               </div>
               <span className="font-semibold text-sm">StagePilot</span>
             </div>

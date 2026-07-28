@@ -31,6 +31,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Separator } from '@/components/ui/separator'
 import { useAuth } from '@/lib/auth-context'
+import { LogoIcon } from '@/components/ui/logo-icon'
 
 interface NavItem {
   title: string
@@ -75,7 +76,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <SidebarHeader>
           <div className="flex items-center gap-2 px-2 py-1">
             <div className="size-7 rounded-md bg-primary flex items-center justify-center shrink-0">
-              <span className="text-primary-foreground font-bold text-xs">SP</span>
+              <LogoIcon className="size-full object-contain" />
             </div>
             <span className="font-semibold text-sm">StagePilot</span>
           </div>

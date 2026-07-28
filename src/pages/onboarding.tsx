@@ -10,6 +10,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { Badge } from '@/components/ui/badge'
 import { invokeEdgeFunction } from '@/lib/edge-functions'
 import { organizationService, profileService } from '@/services'
+import { LogoIcon } from '@/components/ui/logo-icon'
 import type { AiContext, AnalyzeCompanyRequest } from '@/types/edge-functions'
 
 export default function OnboardingPage() {
@@ -81,7 +82,7 @@ export default function OnboardingPage() {
         <div className="mb-8 text-center">
           <div className="inline-flex items-center gap-2 mb-2">
             <div className="size-8 rounded-lg bg-primary flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-sm">SP</span>
+              <LogoIcon className="size-full object-contain" />
             </div>
             <span className="text-xl font-bold tracking-tight">StagePilot</span>
           </div>

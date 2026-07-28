@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { Mail, ArrowRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { LogoIcon } from '@/components/ui/logo-icon'
 
 export default function ConfirmEmailPage() {
   const [searchParams] = useSearchParams()
@@ -16,7 +17,7 @@ export default function ConfirmEmailPage() {
         <div className="mb-8 text-center">
           <div className="inline-flex items-center gap-2 mb-2">
             <div className="size-8 rounded-lg bg-primary flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-sm">SP</span>
+              <LogoIcon className="size-full object-contain" />
             </div>
             <span className="text-xl font-bold tracking-tight">StagePilot</span>
           </div>

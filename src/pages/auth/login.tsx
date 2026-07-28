@@ -10,6 +10,7 @@ import { GlassCard, GlassCardHeader, GlassCardTitle, GlassCardDescription, Glass
 import { Field, FieldLabel, FieldError } from '@/components/ui/field'
 import { Spinner } from '@/components/ui/spinner'
 import Prism from '@/components/ui/prism'
+import { LogoIcon } from '@/components/ui/logo-icon'
 
 const schema = z.object({
   email: z.string().email('Adresse email invalide'),
@@ -53,7 +54,7 @@ export default function LoginPage() {
 
       <Link to="/" className="fixed left-6 top-6 z-20 flex items-center gap-2">
         <div className="flex size-9 items-center justify-center rounded-lg bg-white/90">
-          <span className="text-sm font-bold text-[#0a0a0f]">SP</span>
+          <LogoIcon className="size-full object-contain" />
         </div>
         <span className="text-lg font-bold tracking-tight text-white">StagePilot</span>
       </Link>
