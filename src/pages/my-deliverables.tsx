@@ -1,6 +1,5 @@
 import * as React from 'react'
 import { Plus, Upload, FileText, Link2, CheckCircle2, Clock, XCircle, AlertCircle, Loader2 } from 'lucide-react'
-import { supabase, uploadDeliverable } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth-context'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -10,7 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Field, FieldLabel } from '@/components/ui/field'
-import type { Deliverable, Project } from '@/lib/supabase'
+import { useMyDeliverables, useActiveProjects, useSubmitDeliverable, useUploadDeliverable } from '@/hooks'
 
 const STATUS_CONFIG: Record<string, { label: string; icon: React.ElementType; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
   submitted: { label: 'Soumis', icon: Clock, variant: 'secondary' },
@@ -19,33 +18,18 @@ const STATUS_CONFIG: Record<string, { label: string; icon: React.ElementType; va
   rejected: { label: 'Rejeté', icon: XCircle, variant: 'destructive' },
 }
 
-interface DeliverableWithProject extends Deliverable {
-  projects?: { title: string }
-}
-
 export default function MyDeliverablesPage() {
   const { user, profile } = useAuth()
-  const [deliverables, setDeliverables] = React.useState<DeliverableWithProject[]>([])
-  const [projects, setProjects] = React.useState<Project[]>([])
-  const [loading, setLoading] = React.useState(true)
+  const { data: deliverables, isLoading } = useMyDeliverables(user?.id)
+  const { data: projects } = useActiveProjects(profile?.session_id)
+  const submitDeliverable = useSubmitDeliverable()
+  const uploadDeliverable = useUploadDeliverable()
+
   const [open, setOpen] = React.useState(false)
   const [submitting, setSubmitting] = React.useState(false)
   const [form, setForm] = React.useState({ project_id: '', file_url: '', notes: '' })
   const [file, setFile] = React.useState<File | null>(null)
   const [uploading, setUploading] = React.useState(false)
-
-  const load = React.useCallback(async () => {
-    if (!user || !profile?.session_id) { setLoading(false); return }
-    const [delRes, projRes] = await Promise.all([
-      supabase.from('deliverables').select('*, projects(title)').eq('user_id', user.id).order('submitted_at', { ascending: false }),
-      supabase.from('projects').select('*').eq('session_id', profile.session_id).eq('status', 'active'),
-    ])
-    setDeliverables((delRes.data ?? []) as DeliverableWithProject[])
-    setProjects(projRes.data ?? [])
-    setLoading(false)
-  }, [user, profile])
-
-  React.useEffect(() => { load() }, [load])
 
   const handleSubmit = async () => {
     if (!user || !form.project_id || (!form.file_url && !form.notes && !file)) return
@@ -54,14 +38,14 @@ export default function MyDeliverablesPage() {
     let fileUrl = form.file_url || null
     if (file) {
       try {
-        fileUrl = await uploadDeliverable(file, user.id)
+        fileUrl = await uploadDeliverable.mutateAsync({ file, userId: user.id })
       } catch {
         setUploading(false)
         setSubmitting(false)
         return
       }
     }
-    await supabase.from('deliverables').insert({
+    await submitDeliverable.mutateAsync({
       project_id: form.project_id,
       user_id: user.id,
       file_url: fileUrl,
@@ -72,10 +56,9 @@ export default function MyDeliverablesPage() {
     setOpen(false)
     setSubmitting(false)
     setUploading(false)
-    await load()
   }
 
-  if (loading) return (
+  if (isLoading) return (
     <div className="flex flex-col gap-4">
       <Skeleton className="h-8 w-48" />
       {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-24" />)}
@@ -122,7 +105,7 @@ export default function MyDeliverablesPage() {
                 className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 outline-none"
               >
                 <option value="">Sélectionner un projet</option>
-                {projects.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
+                {projects?.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
               </select>
             </Field>
             <div className="space-y-1">
@@ -178,7 +161,7 @@ export default function MyDeliverablesPage() {
         </DialogContent>
       </Dialog>
 
-      {deliverables.length === 0 ? (
+      {!deliverables || deliverables.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
             <div className="size-12 rounded-full bg-muted flex items-center justify-center">

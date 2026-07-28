@@ -6,9 +6,10 @@ import { z } from 'zod'
 import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { GlassCard, GlassCardHeader, GlassCardTitle, GlassCardDescription, GlassCardContent, GlassCardFooter } from '@/components/ui/glass-card'
 import { Field, FieldLabel, FieldError } from '@/components/ui/field'
 import { Spinner } from '@/components/ui/spinner'
+import Prism from '@/components/ui/prism'
 
 const schema = z.object({
   email: z.string().email('Adresse email invalide'),
@@ -47,67 +48,73 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-svh items-center justify-center bg-muted/40 p-4">
-      <div className="w-full max-w-md">
-        <div className="mb-8 text-center">
-          <div className="inline-flex items-center gap-2 mb-2">
-            <div className="size-8 rounded-lg bg-primary flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-sm">SP</span>
-            </div>
-            <span className="text-xl font-bold tracking-tight">StagePilot</span>
-          </div>
-          <p className="text-sm text-muted-foreground">Du premier jour à la remise du rapport</p>
-        </div>
+    <div className="relative min-h-svh overflow-hidden bg-[#0a0a0f]">
+      <Prism animationType="rotate" timeScale={0.4} glow={1.2} noise={0.2} scale={4} colorFrequency={1.5} bloom={1.2} />
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Connexion</CardTitle>
-            <CardDescription>Accédez à votre espace StagePilot</CardDescription>
-          </CardHeader>
-          <form onSubmit={handleSubmit(onSubmit)}>
-            <CardContent className="flex flex-col gap-4">
-              {error && (
-                <div className="rounded-md bg-destructive/10 border border-destructive/20 px-3 py-2 text-sm text-destructive">
-                  {error}
-                </div>
-              )}
-              <Controller
-                name="email"
-                control={control}
-                render={({ field, fieldState }) => (
-                  <Field data-invalid={fieldState.invalid}>
-                    <FieldLabel htmlFor="email">Email</FieldLabel>
-                    <Input {...field} id="email" type="email" placeholder="marie@entreprise.fr" aria-invalid={fieldState.invalid} />
-                    {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
-                  </Field>
+      <Link to="/" className="fixed left-6 top-6 z-20 flex items-center gap-2">
+        <div className="flex size-9 items-center justify-center rounded-lg bg-white/90">
+          <span className="text-sm font-bold text-[#0a0a0f]">SP</span>
+        </div>
+        <span className="text-lg font-bold tracking-tight text-white">StagePilot</span>
+      </Link>
+
+      <div className="relative z-10 flex min-h-svh items-center justify-center p-6">
+        <div className="w-full max-w-lg">
+          <GlassCard>
+            <GlassCardHeader>
+              <GlassCardTitle>Connexion</GlassCardTitle>
+              <GlassCardDescription>Accédez à votre espace StagePilot</GlassCardDescription>
+            </GlassCardHeader>
+            <form onSubmit={handleSubmit(onSubmit)}>
+              <GlassCardContent className="flex flex-col gap-5">
+                {error && (
+                  <div className="rounded-md bg-destructive/10 border border-destructive/20 px-3 py-2 text-sm text-destructive">
+                    {error}
+                  </div>
                 )}
-              />
-              <Controller
-                name="password"
-                control={control}
-                render={({ field, fieldState }) => (
-                  <Field data-invalid={fieldState.invalid}>
-                    <FieldLabel htmlFor="password">Mot de passe</FieldLabel>
-                    <Input {...field} id="password" type="password" placeholder="••••••••" aria-invalid={fieldState.invalid} />
-                    {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
-                  </Field>
-                )}
-              />
-            </CardContent>
-            <CardFooter className="flex flex-col gap-3">
-              <Button type="submit" className="w-full" disabled={loading}>
-                {loading && <Spinner className="mr-2" />}
-                Se connecter
-              </Button>
-              <p className="text-center text-sm text-muted-foreground">
-                Pas encore de compte ?{' '}
-                <Link to={`/signup${redirectTo !== '/dashboard' ? `?redirect=${redirectTo}` : ''}`} className="text-primary underline-offset-4 hover:underline">
-                  Créer un compte
-                </Link>
-              </p>
-            </CardFooter>
-          </form>
-        </Card>
+                <Controller
+                  name="email"
+                  control={control}
+                  render={({ field, fieldState }) => (
+                    <Field data-invalid={fieldState.invalid}>
+                      <FieldLabel htmlFor="email">Email</FieldLabel>
+                      <Input {...field} id="email" type="email" placeholder="marie@entreprise.fr" aria-invalid={fieldState.invalid} />
+                      {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
+                    </Field>
+                  )}
+                />
+                <Controller
+                  name="password"
+                  control={control}
+                  render={({ field, fieldState }) => (
+                    <Field data-invalid={fieldState.invalid}>
+                      <div className="flex items-center justify-between">
+                        <FieldLabel htmlFor="password">Mot de passe</FieldLabel>
+                        <Link to="/forgot-password" className="text-xs text-muted-foreground underline-offset-4 hover:underline">
+                          Mot de passe oublié ?
+                        </Link>
+                      </div>
+                      <Input {...field} id="password" type="password" placeholder="••••••••" aria-invalid={fieldState.invalid} />
+                      {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
+                    </Field>
+                  )}
+                />
+              </GlassCardContent>
+              <GlassCardFooter className="gap-3 pt-8">
+                <Button type="submit" className="w-full" disabled={loading}>
+                  {loading && <Spinner className="mr-2" />}
+                  Se connecter
+                </Button>
+                <p className="text-center text-sm text-muted-foreground pt-1">
+                  Pas encore de compte ?{' '}
+                  <Link to={`/signup${redirectTo !== '/dashboard' ? `?redirect=${redirectTo}` : ''}`} className="text-primary underline-offset-4 hover:underline">
+                    Créer un compte
+                  </Link>
+                </p>
+              </GlassCardFooter>
+            </form>
+          </GlassCard>
+        </div>
       </div>
     </div>
   )

@@ -1,14 +1,12 @@
 import * as React from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { ArrowLeft, FileText, GitBranch, Table2, Presentation, Calendar } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Separator } from '@/components/ui/separator'
-import { Spinner } from '@/components/ui/spinner'
-import type { Project, Session } from '@/lib/supabase'
+import { useProjectDetail } from '@/hooks'
 
 const DELIVERABLE_ICONS: Record<string, React.ElementType> = {
   pdf: FileText, git: GitBranch, spreadsheet: Table2, presentation: Presentation, other: FileText,
@@ -20,34 +18,12 @@ const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondar
   archived: { label: 'Archivé', variant: 'secondary' },
 }
 
-interface ProjectWithSession extends Project {
-  sessions?: { name: string; academic_level: string }
-}
-
 export default function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const [project, setProject] = React.useState<ProjectWithSession | null>(null)
-  const [loading, setLoading] = React.useState(true)
-  const [error, setError] = React.useState<string | null>(null)
+  const { data: project, isLoading, error } = useProjectDetail(id)
 
-  React.useEffect(() => {
-    const load = async () => {
-      if (!id) { setError('ID du projet manquant'); setLoading(false); return }
-      const { data, error: err } = await supabase
-        .from('projects')
-        .select('*, sessions(name, academic_level)')
-        .eq('id', id)
-        .maybeSingle()
-      if (err) { setError(err.message); setLoading(false); return }
-      if (!data) { setError('Projet introuvable'); setLoading(false); return }
-      setProject(data as ProjectWithSession)
-      setLoading(false)
-    }
-    load()
-  }, [id])
-
-  if (loading) return (
+  if (isLoading) return (
     <div className="flex flex-col gap-4">
       <Skeleton className="h-8 w-64" />
       <Skeleton className="h-48" />
@@ -56,7 +32,7 @@ export default function ProjectDetailPage() {
 
   if (error) return (
     <div className="flex flex-col items-center gap-4 py-16 text-center">
-      <p className="text-destructive font-medium">{error}</p>
+      <p className="text-destructive font-medium">Projet introuvable</p>
       <Button variant="outline" onClick={() => navigate('/projects')}>Retour aux projets</Button>
     </div>
   )

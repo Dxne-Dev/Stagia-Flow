@@ -1,7 +1,6 @@
 import * as React from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Globe, ArrowRight, Sparkles, CheckCircle2, Building2 } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth-context'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -9,14 +8,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Field, FieldLabel, FieldDescription } from '@/components/ui/field'
 import { Spinner } from '@/components/ui/spinner'
 import { Badge } from '@/components/ui/badge'
-
-interface AiContext {
-  sector?: string
-  main_activities?: string[]
-  tech_stack?: string[]
-  recent_projects?: string[]
-  summary?: string
-}
+import { invokeEdgeFunction } from '@/lib/edge-functions'
+import { organizationService, profileService } from '@/services'
+import type { AiContext, AnalyzeCompanyRequest } from '@/types/edge-functions'
 
 export default function OnboardingPage() {
   const { user, refreshProfile } = useAuth()
@@ -45,39 +39,26 @@ export default function OnboardingPage() {
       }
 
       if (websiteUrl) {
-        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string
-        const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
         try {
-          const resp = await fetch(`${supabaseUrl}/functions/v1/analyze-company`, {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${supabaseAnonKey}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ url: websiteUrl, org_name: orgName }),
+          const data = await invokeEdgeFunction<AnalyzeCompanyRequest, AiContext>('analyze-company', {
+            url: websiteUrl,
+            org_name: orgName,
           })
-          if (resp.ok) {
-            const data = await resp.json() as AiContext
-            if (data.sector) context = data
-          }
+          if (data.sector) context = data
         } catch {
-          // fallback to mock
+          // fallback to default context
         }
       }
 
-      const { data: org, error: orgError } = await supabase
-        .from('organizations')
-        .insert({ name: orgName, website_url: websiteUrl || null, ai_context_json: context, owner_id: user!.id })
-        .select()
-        .single()
-
-      if (orgError) throw orgError
+      const org = await organizationService.create({
+        name: orgName,
+        website_url: websiteUrl || null,
+        ai_context_json: context as Record<string, unknown>,
+        owner_id: user!.id,
+      })
       setOrgId(org.id)
 
-      await supabase
-        .from('user_profiles')
-        .update({ organization_id: org.id, role: 'admin' })
-        .eq('id', user!.id)
+      await profileService.update(user!.id, { organization_id: org.id, role: 'admin' })
 
       setAiContext(context)
       setStep('review')

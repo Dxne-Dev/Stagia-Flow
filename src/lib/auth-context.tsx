@@ -1,5 +1,7 @@
 import * as React from 'react'
-import { supabase, type UserProfile } from '@/lib/supabase'
+import { supabase } from '@/lib/supabase'
+import { profileService } from '@/services'
+import type { UserProfile } from '@/types'
 import type { Session, User } from '@supabase/supabase-js'
 
 interface AuthContextValue {
@@ -20,21 +22,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = React.useState(true)
 
   const fetchProfile = React.useCallback(async (userId: string) => {
-    const { data } = await supabase
-      .from('user_profiles')
-      .select('*')
-      .eq('id', userId)
-      .maybeSingle()
-    if (data) {
-      setProfile(data)
-    } else {
-      const { data: newProfile } = await supabase
-        .from('user_profiles')
-        .insert({ id: userId, role: 'admin' })
-        .select()
-        .maybeSingle()
-      setProfile(newProfile ?? null)
+    let data = await profileService.getById(userId)
+    if (!data) {
+      data = await profileService.create(userId)
     }
+    setProfile(data)
   }, [])
 
   const refreshProfile = React.useCallback(async () => {

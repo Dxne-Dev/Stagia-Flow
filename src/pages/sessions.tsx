@@ -1,6 +1,5 @@
 import * as React from 'react'
 import { Plus, Copy, Check, Users, BookOpen, GraduationCap, FlaskConical, Trash2 } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth-context'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -10,67 +9,62 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Field, FieldLabel } from '@/components/ui/field'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import type { Session, AcademicLevel } from '@/lib/supabase'
+import { useSessions, useCreateSession, useDeleteSession, useOrganization } from '@/hooks'
+import { canCreateSession, PLAN_LABELS, PLAN_LIMITS, isLimitError } from '@/lib/plan-utils'
+import UpgradeBanner from '@/components/upgrade-banner'
+import type { AcademicLevel } from '@/types'
 
-const LEVEL_CONFIG: Record<AcademicLevel, { label: string; icon: React.ElementType; description: string; color: string }> = {
-  licence: { label: 'Licence / Bachelor', icon: BookOpen, description: 'Tâches guidées, recherche, rédaction, tests', color: 'text-blue-500' },
-  master: { label: 'Master', icon: GraduationCap, description: 'Conception, analyse stratégique, développement', color: 'text-violet-500' },
-  doctorat: { label: 'Doctorat / R&D', icon: FlaskConical, description: 'Études prospectives, recherche appliquée', color: 'text-emerald-500' },
+const LEVEL_CONFIG: Record<AcademicLevel, { label: string; icon: React.ElementType; description: string; color: string; years: number[] }> = {
+  licence: { label: 'Licence / Bachelor', icon: BookOpen, description: 'Tâches guidées, recherche, rédaction, tests', color: 'text-blue-500', years: [1, 2, 3] },
+  master: { label: 'Master', icon: GraduationCap, description: 'Conception, analyse stratégique, développement', color: 'text-violet-500', years: [1, 2] },
+  doctorat: { label: 'Doctorat / R&D', icon: FlaskConical, description: 'Études prospectives, recherche appliquée', color: 'text-emerald-500', years: [1, 2, 3] },
 }
 
 export default function SessionsPage() {
   const { profile, loading: authLoading } = useAuth()
-  const [sessions, setSessions] = React.useState<Session[]>([])
-  const [loading, setLoading] = React.useState(true)
+  const [page, setPage] = React.useState(0)
+  const { data, isLoading } = useSessions(profile?.organization_id, page)
+  const { data: org } = useOrganization(profile?.organization_id)
+  const createSession = useCreateSession()
+  const deleteSession = useDeleteSession()
+
+  const sessions = data?.data ?? []
+  const count = data?.count ?? 0
+  const hasMore = count != null && (page + 1) * 20 < count
+
+  const plan = org?.plan ?? 'essentiel'
+  const sessionLimit = canCreateSession(plan, count)
+  const isAtLimit = !sessionLimit.allowed
+
   const [open, setOpen] = React.useState(false)
   const [creating, setCreating] = React.useState(false)
-  const [form, setForm] = React.useState({ name: '', academic_level: 'master' as AcademicLevel, department: '' })
+  const [form, setForm] = React.useState({ name: '', academic_level: 'master' as AcademicLevel, academic_year: '' as string, department: '' })
+  const [createError, setCreateError] = React.useState<string | null>(null)
   const [copied, setCopied] = React.useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = React.useState<string | null>(null)
-  const [page, setPage] = React.useState(0)
-  const [hasMore, setHasMore] = React.useState(true)
-  const PAGE_SIZE = 20
 
-  const load = React.useCallback(async (pageNum: number) => {
-    if (authLoading) return
-    if (!profile?.organization_id) { setLoading(false); return }
-    const from = pageNum * PAGE_SIZE
-    const to = from + PAGE_SIZE - 1
-    const { data, count } = await supabase
-      .from('sessions').select('*', { count: 'exact', head: false })
-      .eq('organization_id', profile.organization_id)
-      .order('created_at', { ascending: false })
-      .range(from, to)
-    if (pageNum === 0) {
-      setSessions(data ?? [])
-    } else {
-      setSessions(prev => [...prev, ...(data ?? [])])
-    }
-    setHasMore(count != null && (pageNum + 1) * PAGE_SIZE < count)
-    setLoading(false)
-  }, [profile, authLoading])
-
-  React.useEffect(() => { load(0) }, [load])
-
-  const handleLoadMore = () => {
-    const nextPage = page + 1
-    setPage(nextPage)
-    load(nextPage)
-  }
+  const handleLoadMore = () => setPage(p => p + 1)
 
   const handleCreate = async () => {
     if (!profile?.organization_id || !form.name) return
+    setCreateError(null)
     setCreating(true)
-    await supabase.from('sessions').insert({
-      organization_id: profile.organization_id,
-      name: form.name,
-      academic_level: form.academic_level,
-      department: form.department || null,
-    })
-    setForm({ name: '', academic_level: 'master', department: '' })
-    setOpen(false)
-    setCreating(false)
-    await load()
+    try {
+      await createSession.mutateAsync({
+        organization_id: profile.organization_id,
+        name: form.name,
+        academic_level: form.academic_level,
+        academic_year: form.academic_year ? parseInt(form.academic_year) : null,
+        department: form.department || null,
+      })
+      setForm({ name: '', academic_level: 'master', academic_year: '', department: '' })
+      setOpen(false)
+    } catch (e) {
+      const msg = isLimitError(e)
+      setCreateError(msg ?? 'Erreur lors de la création')
+    } finally {
+      setCreating(false)
+    }
   }
 
   const handleCopyLink = (token: string) => {
@@ -82,14 +76,13 @@ export default function SessionsPage() {
 
   const handleDelete = async (id: string) => {
     if (deleteTarget !== id) return
-    await supabase.from('sessions').delete().eq('id', id)
-    setSessions(prev => prev.filter(s => s.id !== id))
+    await deleteSession.mutateAsync(id)
     setDeleteTarget(null)
   }
 
   const confirmDelete = (id: string) => setDeleteTarget(id)
 
-  if (loading) return (
+  if (isLoading || authLoading) return (
     <div className="flex flex-col gap-4">
       <Skeleton className="h-8 w-40" />
       <div className="grid gap-4">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-32" />)}</div>
@@ -103,27 +96,49 @@ export default function SessionsPage() {
           <h1 className="text-2xl font-bold tracking-tight">Sessions de stage</h1>
           <p className="text-muted-foreground text-sm mt-0.5">Gérez vos cohortes par niveau académique</p>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button><Plus className="size-4" /> Nouvelle session</Button>
-          </DialogTrigger>
+        <div className="flex items-center gap-3">
+          {isAtLimit && (
+            <span className="text-xs text-muted-foreground">
+              Limite atteinte ({count}/{PLAN_LIMITS[plan].max_sessions})
+            </span>
+          )}
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <Button disabled={isAtLimit} title={isAtLimit ? `Limite de ${PLAN_LIMITS[plan].max_sessions} sessions atteinte` : ''}>
+                <Plus className="size-4" /> Nouvelle session
+              </Button>
+            </DialogTrigger>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Créer une session</DialogTitle>
               <DialogDescription>Définissez une cohorte de stagiaires par niveau académique.</DialogDescription>
             </DialogHeader>
             <div className="flex flex-col gap-4 py-2">
+              {createError && (
+                <div className="rounded-md bg-destructive/10 border border-destructive/20 px-3 py-2 text-sm text-destructive">{createError}</div>
+              )}
               <Field>
                 <FieldLabel htmlFor="sname">Nom de la session *</FieldLabel>
                 <Input id="sname" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Été 2025 – Ingénierie" />
               </Field>
               <Field>
                 <FieldLabel>Niveau académique *</FieldLabel>
-                <Select value={form.academic_level} onValueChange={v => setForm(f => ({ ...f, academic_level: v as AcademicLevel }))}>
+                <Select value={form.academic_level} onValueChange={v => setForm(f => ({ ...f, academic_level: v as AcademicLevel, academic_year: '' }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {Object.entries(LEVEL_CONFIG).map(([k, v]) => (
                       <SelectItem key={k} value={k}>{v.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field>
+                <FieldLabel>Année dans le cycle</FieldLabel>
+                <Select value={form.academic_year} onValueChange={v => setForm(f => ({ ...f, academic_year: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Non spécifiée" /></SelectTrigger>
+                  <SelectContent>
+                    {LEVEL_CONFIG[form.academic_level].years.map(y => (
+                      <SelectItem key={y} value={String(y)}>{y}e année</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -142,6 +157,11 @@ export default function SessionsPage() {
           </DialogContent>
         </Dialog>
       </div>
+      </div>
+
+      {isAtLimit && (
+        <UpgradeBanner message={`Vous avez atteint la limite de ${PLAN_LIMITS[plan].max_sessions} sessions sur le plan ${PLAN_LABELS[plan]}. Passez à Pro pour des sessions illimitées.`} />
+      )}
 
       {sessions.length === 0 ? (
         <Card>
@@ -175,6 +195,7 @@ export default function SessionsPage() {
                     </div>
                     <div className="flex items-center gap-2">
                       <Badge variant="secondary" className="capitalize">{cfg.label}</Badge>
+                      {session.academic_year && <Badge variant="outline">{session.academic_year}e année</Badge>}
                       {session.department && <Badge variant="outline">{session.department}</Badge>}
                     </div>
                   </div>

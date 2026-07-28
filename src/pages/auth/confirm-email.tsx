@@ -1,4 +1,4 @@
-import * as React from 'react'
+
 import { Link, useSearchParams } from 'react-router-dom'
 import { Mail, ArrowRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'

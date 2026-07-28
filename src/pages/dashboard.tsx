@@ -1,20 +1,12 @@
-import * as React from 'react'
 import { Link } from 'react-router-dom'
 import { Users, FolderKanban, CheckCircle2, Clock, Plus, TrendingUp, ArrowRight, Briefcase, Upload, FileText, Calendar } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth-context'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import type { Project, Deliverable, UserProfile, Session } from '@/lib/supabase'
-
-interface Stats {
-  sessions: number
-  projects: number
-  deliverables_pending: number
-  deliverables_validated: number
-}
+import { useRecentProjects, useSessionProjects, useMyDeliverable, usePendingDeliverables } from '@/hooks'
+import type { UserProfile } from '@/types'
 
 export default function DashboardPage() {
   const { profile, loading: authLoading } = useAuth()
@@ -26,34 +18,16 @@ export default function DashboardPage() {
 }
 
 function ManagerDashboard({ profile }: { profile: UserProfile | null }) {
-  const [stats, setStats] = React.useState<Stats | null>(null)
-  const [recentProjects, setRecentProjects] = React.useState<Project[]>([])
-  const [loading, setLoading] = React.useState(true)
+  const { data: recentProjects, isLoading } = useRecentProjects(profile?.organization_id)
+  const { data: pendingDeliverables } = usePendingDeliverables(profile?.organization_id)
 
-  React.useEffect(() => {
-    const load = async () => {
-      if (!profile?.organization_id) { setLoading(false); return }
-      const [sessionsRes, projectsRes, deliverablesRes] = await Promise.all([
-        supabase.from('sessions').select('id').eq('organization_id', profile.organization_id),
-        supabase.from('projects').select('*, sessions!inner(organization_id)').eq('sessions.organization_id', profile.organization_id).order('created_at', { ascending: false }).limit(5),
-        supabase.from('deliverables').select('id, status, projects!inner(session_id, sessions!inner(organization_id))'),
-      ])
-      const sessions = sessionsRes.data ?? []
-      const projects = (projectsRes.data ?? []) as Project[]
-      const deliverables = (deliverablesRes.data ?? []) as unknown as Deliverable[]
-      setStats({
-        sessions: sessions.length,
-        projects: projects.length,
-        deliverables_pending: deliverables.filter(d => d.status === 'submitted' || d.status === 'under_review').length,
-        deliverables_validated: deliverables.filter(d => d.status === 'validated').length,
-      })
-      setRecentProjects(projects)
-      setLoading(false)
-    }
-    load()
-  }, [profile])
+  const stats = {
+    projects: recentProjects?.length ?? 0,
+    deliverables_pending: pendingDeliverables?.filter(d => d.status === 'submitted' || d.status === 'under_review').length ?? 0,
+    deliverables_validated: pendingDeliverables?.filter(d => d.status === 'validated').length ?? 0,
+  }
 
-  if (loading) return <LoadingSkeleton />
+  if (isLoading) return <LoadingSkeleton />
   if (!profile?.organization_id) return <NoOrgView />
 
   return (
@@ -73,10 +47,9 @@ function ManagerDashboard({ profile }: { profile: UserProfile | null }) {
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { title: 'Sessions actives', value: stats?.sessions ?? 0, icon: Users, color: 'text-blue-500', desc: 'cohortes créées' },
-          { title: 'Projets générés', value: stats?.projects ?? 0, icon: FolderKanban, color: 'text-violet-500', desc: 'briefs créés' },
-          { title: 'En attente de validation', value: stats?.deliverables_pending ?? 0, icon: Clock, color: 'text-amber-500', desc: 'livrables soumis' },
-          { title: 'Livrables validés', value: stats?.deliverables_validated ?? 0, icon: CheckCircle2, color: 'text-emerald-500', desc: 'complétés' },
+          { title: 'Projets générés', value: stats.projects, icon: FolderKanban, color: 'text-violet-500', desc: 'briefs créés' },
+          { title: 'En attente de validation', value: stats.deliverables_pending, icon: Clock, color: 'text-amber-500', desc: 'livrables soumis' },
+          { title: 'Livrables validés', value: stats.deliverables_validated, icon: CheckCircle2, color: 'text-emerald-500', desc: 'complétés' },
         ].map(card => (
           <Card key={card.title}>
             <CardHeader className="pb-2">
@@ -104,7 +77,7 @@ function ManagerDashboard({ profile }: { profile: UserProfile | null }) {
             </div>
           </CardHeader>
           <CardContent>
-            {recentProjects.length === 0 ? (
+            {!recentProjects || recentProjects.length === 0 ? (
               <div className="flex flex-col items-center gap-2 py-8 text-center">
                 <FolderKanban className="size-8 text-muted-foreground" />
                 <p className="text-sm text-muted-foreground">Aucun projet créé</p>
@@ -153,28 +126,9 @@ function ManagerDashboard({ profile }: { profile: UserProfile | null }) {
 }
 
 function StagiaireDashboard({ profile }: { profile: UserProfile | null }) {
-  const [session, setSession] = React.useState<Session | null>(null)
-  const [project, setProject] = React.useState<Project | null>(null)
-  const [deliverable, setDeliverable] = React.useState<Deliverable | null>(null)
-  const [loading, setLoading] = React.useState(true)
-
-  React.useEffect(() => {
-    const load = async () => {
-      if (!profile?.session_id) { setLoading(false); return }
-      const [sessionRes, projectRes, deliverableRes] = await Promise.all([
-        supabase.from('sessions').select('*').eq('id', profile.session_id).maybeSingle(),
-        supabase.from('projects').select('*').eq('session_id', profile.session_id).maybeSingle(),
-        supabase.from('deliverables').select('*').eq('user_id', profile.id).maybeSingle(),
-      ])
-      if (sessionRes.data) setSession(sessionRes.data as Session)
-      if (projectRes.data) setProject(projectRes.data as Project)
-      if (deliverableRes.data) setDeliverable(deliverableRes.data as Deliverable)
-      setLoading(false)
-    }
-    load()
-  }, [profile])
-
-  if (loading) return <LoadingSkeleton />
+  const { user } = useAuth()
+  const { data: project } = useSessionProjects(profile?.session_id)
+  const { data: deliverable } = useMyDeliverable(user?.id)
 
   return (
     <div className="flex flex-col gap-6">
@@ -192,13 +146,7 @@ function StagiaireDashboard({ profile }: { profile: UserProfile | null }) {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="font-semibold truncate">{session?.name ?? 'Non assigné'}</p>
-            {session && (
-              <p className="text-xs text-muted-foreground mt-1 capitalize">
-                {session.academic_level === 'licence' ? 'Licence' : session.academic_level === 'master' ? 'Master' : 'Doctorat'}
-                {session.department ? ` · ${session.department}` : ''}
-              </p>
-            )}
+            <p className="font-semibold truncate">{project?.title ?? 'Non assigné'}</p>
           </CardContent>
         </Card>
 
@@ -282,12 +230,10 @@ function StagiaireDashboard({ profile }: { profile: UserProfile | null }) {
           <CardContent>
             {deliverable ? (
               <div className="flex flex-col gap-3">
-                <div className="flex items-center gap-2">
-                  <DeliverableStatusBadge status={deliverable.status} />
-                  <span className="text-xs text-muted-foreground">
-                    Soumis le {new Date(deliverable.submitted_at).toLocaleDateString('fr-FR')}
-                  </span>
-                </div>
+                <DeliverableStatusBadge status={deliverable.status} />
+                <p className="text-xs text-muted-foreground">
+                  Soumis le {new Date(deliverable.submitted_at).toLocaleDateString('fr-FR')}
+                </p>
                 {deliverable.notes && (
                   <p className="text-sm text-muted-foreground">{deliverable.notes}</p>
                 )}

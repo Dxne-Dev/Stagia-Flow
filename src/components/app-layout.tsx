@@ -150,7 +150,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <header className="flex h-12 items-center gap-2 border-b px-4">
           <SidebarTrigger />
           <Separator orientation="vertical" className="h-4" />
-          <span className="text-sm text-muted-foreground">{user?.email}</span>
+          <span className="text-sm text-muted-foreground">{profile?.full_name ?? user?.email}</span>
         </header>
         <main className="flex-1 p-6">
           {children}

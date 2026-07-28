@@ -12,7 +12,9 @@ dist
 dist-ssr
 *.local
 .env
-.env.example
+
+# Bolt.new editor metadata
+.bolt/
 
 # Editor directories and files
 .vscode/*
@@ -30,3 +32,28 @@ supabase/.temp/
 log.md
 next-env.d.ts
 landing.md
+
+# AI skills & config
+.agents/
+.claude/
+skills-lock.json
+
+# Design references
+DESIGN-MD/
+
+# Documentation / specs (LLM-generated, not source code)
+background.md
+login-and-signup-style.md
+
+# Vendor SVG assets (not referenced in source)
+public/svg/
+
+# Dev utility scripts
+scripts/
+
+# Generated assets
+public/logo-showcase.html
+public/logos/
+
+# svgls CLI config
+svgls.json

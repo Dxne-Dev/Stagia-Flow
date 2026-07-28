@@ -1,85 +1,58 @@
 import * as React from 'react'
-import { Users, BookOpen, GraduationCap, FlaskConical, Mail, UserX, CheckCircle2, Clock, XCircle } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { Users, BookOpen, GraduationCap, FlaskConical, Mail, UserX } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import type { UserProfile, Session, AcademicLevel } from '@/lib/supabase'
-
-interface StagiaireWithSession extends UserProfile {
-  sessions: Pick<Session, 'name' | 'academic_level'> | null
-}
+import { useStagiaires, useSessionsList, useAssignSession, useOrganization } from '@/hooks'
+import { canAddStagiaire, PLAN_LABELS, PLAN_LIMITS, isLimitError } from '@/lib/plan-utils'
+import UpgradeBanner from '@/components/upgrade-banner'
+import { toast } from 'sonner'
 
 export default function StagiairesPage() {
   const { profile, loading: authLoading } = useAuth()
-  const [stagiaires, setStagiaires] = React.useState<StagiaireWithSession[]>([])
-  const [sessions, setSessions] = React.useState<Session[]>([])
-  const [loading, setLoading] = React.useState(true)
+  const [page, setPage] = React.useState(0)
+  const { data, isLoading } = useStagiaires(profile?.organization_id, page)
+  const { data: sessionsData } = useSessionsList(profile?.organization_id)
+  const { data: org } = useOrganization(profile?.organization_id)
+  const assignSession = useAssignSession()
+
+  const stagiaires = data?.data ?? []
+  const sessions = sessionsData ?? []
+  const count = data?.count ?? 0
+  const hasMore = count != null && (page + 1) * 50 < count
+
+  const plan = org?.plan ?? 'essentiel'
+  const stagiaireLimit = canAddStagiaire(plan, count)
+  const isAtLimit = !stagiaireLimit.allowed
+
   const [sessionFilter, setSessionFilter] = React.useState<string>('all')
   const [assigning, setAssigning] = React.useState<string | null>(null)
-  const [page, setPage] = React.useState(0)
-  const [hasMore, setHasMore] = React.useState(true)
-  const PAGE_SIZE = 50
 
-  const load = React.useCallback(async (pageNum: number) => {
-    if (authLoading) return
-    if (!profile?.organization_id) { setLoading(false); return }
-    const from = pageNum * PAGE_SIZE
-    const to = from + PAGE_SIZE - 1
-    const [stagiairesRes, sessionsRes] = await Promise.all([
-      supabase
-        .from('user_profiles')
-        .select('*, sessions!left(name, academic_level)', { count: 'exact', head: false })
-        .eq('organization_id', profile.organization_id)
-        .eq('role', 'stagiaire')
-        .order('created_at', { ascending: false })
-        .range(from, to),
-      supabase
-        .from('sessions')
-        .select('*')
-        .eq('organization_id', profile.organization_id)
-        .order('name'),
-    ])
-
-    if (pageNum === 0) {
-      setStagiaires((stagiairesRes.data ?? []) as StagiaireWithSession[])
-    } else {
-      setStagiaires(prev => [...prev, ...(stagiairesRes.data ?? []) as StagiaireWithSession[]])
-    }
-    setSessions(sessionsRes.data ?? [])
-    setHasMore(stagiairesRes.count != null && (pageNum + 1) * PAGE_SIZE < stagiairesRes.count)
-    setLoading(false)
-  }, [profile, authLoading])
-
-  React.useEffect(() => { load(0) }, [load])
-
-  const handleLoadMore = () => {
-    const nextPage = page + 1
-    setPage(nextPage)
-    load(nextPage)
-  }
+  const handleLoadMore = () => setPage(p => p + 1)
 
   const handleAssign = async (stagiaireId: string, sessionId: string) => {
     setAssigning(stagiaireId)
-    await supabase.from('user_profiles').update({ session_id: sessionId || null }).eq('id', stagiaireId)
-    setAssigning(null)
-    await load()
+    try {
+      await assignSession.mutateAsync({ userId: stagiaireId, sessionId: sessionId || null })
+    } catch (e) {
+      const msg = isLimitError(e)
+      if (msg) toast.error(msg)
+      else toast.error('Erreur lors de l\'assignation')
+    } finally {
+      setAssigning(null)
+    }
   }
 
   const filtered = sessionFilter === 'all'
     ? stagiaires
-    : stagiaires.filter(s => s.session_id === sessionFilter)
+    : sessionFilter === 'unassigned'
+      ? stagiaires.filter(s => !s.session_id)
+      : stagiaires.filter(s => s.session_id === sessionFilter)
 
-  const LEVEL_LABEL: Record<AcademicLevel, string> = {
-    licence: 'Licence',
-    master: 'Master',
-    doctorat: 'Doctorat',
-  }
-
-  if (loading) return (
+  if (isLoading || authLoading) return (
     <div className="flex flex-col gap-4">
       <Skeleton className="h-8 w-48" />
       <Skeleton className="h-64" />
@@ -91,7 +64,7 @@ export default function StagiairesPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Stagiaires</h1>
-          <p className="text-muted-foreground text-sm mt-0.5">{stagiaires.length} stagiaire{stagiaires.length > 1 ? 's' : ''} dans l'organisation</p>
+          <p className="text-muted-foreground text-sm mt-0.5">{count ?? stagiaires.length} stagiaire{stagiaires.length > 1 ? 's' : ''} dans l'organisation</p>
         </div>
         <div className="flex items-center gap-2">
           <Select value={sessionFilter} onValueChange={setSessionFilter}>
@@ -108,6 +81,10 @@ export default function StagiairesPage() {
           </Select>
         </div>
       </div>
+
+      {isAtLimit && (
+        <UpgradeBanner message={`Vous avez atteint la limite de ${PLAN_LIMITS[plan].max_stagiaires} stagiaires sur le plan ${PLAN_LABELS[plan]}. Passez à Pro pour des stagiaires illimités.`} />
+      )}
 
       {filtered.length === 0 ? (
         <Card>
@@ -150,6 +127,7 @@ export default function StagiairesPage() {
                          stagiaire.sessions.academic_level === 'doctorat' ? <FlaskConical className="size-3" /> :
                          <GraduationCap className="size-3" />}
                         {stagiaire.sessions.name}
+                        {stagiaire.sessions.academic_year && <span className="ml-1 opacity-70">({stagiaire.sessions.academic_year}e a.)</span>}
                       </Badge>
                     ) : (
                       <Badge variant="outline" className="text-muted-foreground">Non assigné</Badge>

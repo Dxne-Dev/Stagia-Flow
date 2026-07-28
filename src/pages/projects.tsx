@@ -1,6 +1,5 @@
 import * as React from 'react'
-import { Sparkles, CheckCircle2, RefreshCw, Eye, ChevronDown, ChevronUp, FileText, GitBranch, Table2, Presentation, MoreHorizontal } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { Sparkles, CheckCircle2, RefreshCw, Eye, ChevronDown, ChevronUp, FileText, GitBranch, Table2, Presentation, MoreHorizontal, Trash2 } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -11,7 +10,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Spinner } from '@/components/ui/spinner'
-import type { Project, Session, DeliverableType, ProjectStatus } from '@/lib/supabase'
+import { useSessionsList, useProjects, useUpdateProjectStatus, useDeleteProject } from '@/hooks'
+import { organizationService } from '@/services'
+import { projectService } from '@/services'
+import { invokeEdgeFunction } from '@/lib/edge-functions'
+import { isLimitError } from '@/lib/plan-utils'
+import type { DeliverableType, ProjectStatus } from '@/types'
+import type { GenerateBriefRequest, GenerateBriefResponse } from '@/types/edge-functions'
 
 const DELIVERABLE_ICONS: Record<DeliverableType, React.ElementType> = {
   pdf: FileText, git: GitBranch, spreadsheet: Table2, presentation: Presentation, other: FileText,
@@ -23,54 +28,41 @@ const STATUS_MAP: Record<ProjectStatus, { label: string; variant: 'default' | 's
   archived: { label: 'Archivé', variant: 'secondary' },
 }
 
-interface ProjectWithSession extends Project {
-  sessions?: { name: string; academic_level: string }
+interface ProjectWithSession {
+  id: string
+  session_id: string
+  title: string
+  context_objective: string | null
+  instructions: string | null
+  deliverable_type: DeliverableType
+  deadline: string | null
+  status: ProjectStatus
+  created_by: string
+  created_at: string
+  sessions?: { name: string; academic_level: string; academic_year: number | null }
 }
 
 export default function ProjectsPage() {
-  const { profile, loading: authLoading } = useAuth()
-  const [projects, setProjects] = React.useState<ProjectWithSession[]>([])
-  const [sessions, setSessions] = React.useState<Session[]>([])
-  const [loading, setLoading] = React.useState(true)
+  const { user, profile, loading: authLoading } = useAuth()
+  const { data: sessions } = useSessionsList(profile?.organization_id)
+  const sessionIds = (sessions ?? []).map(s => s.id)
+  const [page, setPage] = React.useState(0)
+  const { data, isLoading, refetch } = useProjects(sessionIds, page)
+  const updateStatus = useUpdateProjectStatus()
+  const deleteProject = useDeleteProject()
+
+  const projects = (data?.data ?? []) as ProjectWithSession[]
+  const count = data?.count
+  const hasMore = count != null && (page + 1) * 20 < count
+
   const [generating, setGenerating] = React.useState(false)
   const [genDialogOpen, setGenDialogOpen] = React.useState(false)
   const [selectedSession, setSelectedSession] = React.useState<string>('')
   const [expandedId, setExpandedId] = React.useState<string | null>(null)
   const [genError, setGenError] = React.useState<string | null>(null)
-  const [page, setPage] = React.useState(0)
-  const [hasMore, setHasMore] = React.useState(true)
-  const PAGE_SIZE = 20
+  const [deleteTarget, setDeleteTarget] = React.useState<string | null>(null)
 
-  const load = React.useCallback(async (pageNum: number) => {
-    if (authLoading) return
-    if (!profile?.organization_id) { setLoading(false); return }
-    const sessRes = await supabase.from('sessions').select('*').eq('organization_id', profile.organization_id)
-    const sessionIds = sessRes.data?.map(s => s.id) ?? []
-    const from = pageNum * PAGE_SIZE
-    const to = from + PAGE_SIZE - 1
-    const projRes = await supabase
-      .from('projects')
-      .select('*, sessions(name, academic_level)', { count: 'exact', head: false })
-      .in('session_id', sessionIds)
-      .order('created_at', { ascending: false })
-      .range(from, to)
-    if (pageNum === 0) {
-      setProjects((projRes.data ?? []) as ProjectWithSession[])
-    } else {
-      setProjects(prev => [...prev, ...(projRes.data ?? []) as ProjectWithSession[]])
-    }
-    setSessions(sessRes.data ?? [])
-    setHasMore(projRes.count != null && (pageNum + 1) * PAGE_SIZE < projRes.count)
-    setLoading(false)
-  }, [profile, authLoading])
-
-  React.useEffect(() => { load(0) }, [load])
-
-  const handleLoadMore = () => {
-    const nextPage = page + 1
-    setPage(nextPage)
-    load(nextPage)
-  }
+  const handleLoadMore = () => setPage(p => p + 1)
 
   const handleGenerate = async () => {
     if (!selectedSession || !profile?.organization_id) return
@@ -78,49 +70,52 @@ export default function ProjectsPage() {
     setGenerating(true)
 
     try {
-      const { data: org } = await supabase.from('organizations').select('*').eq('id', profile.organization_id).maybeSingle()
-      const { data: sess } = await supabase.from('sessions').select('*').eq('id', selectedSession).maybeSingle()
-
+      const org = await organizationService.getById(profile.organization_id)
+      const sess = sessions?.find(s => s.id === selectedSession)
       if (!org || !sess) throw new Error('Organisation ou session introuvable')
 
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string
-      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
-
-      const resp = await fetch(`${supabaseUrl}/functions/v1/generate-brief`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${supabaseAnonKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: selectedSession, org_context: org.ai_context_json, academic_level: sess.academic_level }),
+      const brief = await invokeEdgeFunction<GenerateBriefRequest, GenerateBriefResponse>('generate-brief', {
+        session_id: selectedSession,
+        org_context: org.ai_context_json,
+        academic_level: sess.academic_level,
+        academic_year: sess.academic_year,
       })
 
-      if (!resp.ok) throw new Error('Erreur lors de la génération')
-      const brief = await resp.json() as { title: string; context_objective: string; instructions: string; deliverable_type: DeliverableType; deadline: string }
-
-      await supabase.from('projects').insert({
+      await projectService.create({
         session_id: selectedSession,
         title: brief.title,
         context_objective: brief.context_objective,
         instructions: brief.instructions,
-        deliverable_type: brief.deliverable_type ?? 'pdf',
+        deliverable_type: (brief.deliverable_type as DeliverableType) ?? 'pdf',
         deadline: brief.deadline ?? null,
         status: 'draft',
+        created_by: user!.id,
       })
 
       setGenDialogOpen(false)
       setSelectedSession('')
-      await load()
+      refetch()
     } catch (e: unknown) {
-      setGenError(e instanceof Error ? e.message : 'Erreur inconnue')
+      const msg = isLimitError(e)
+      setGenError(msg ?? (e instanceof Error ? e.message : 'Erreur inconnue'))
     } finally {
       setGenerating(false)
     }
   }
 
   const handleStatusChange = async (id: string, status: ProjectStatus) => {
-    await supabase.from('projects').update({ status }).eq('id', id)
-    setProjects(prev => prev.map(p => p.id === id ? { ...p, status } : p))
+    await updateStatus.mutateAsync({ id, status })
   }
 
-  if (loading) return (
+  const handleDelete = async (id: string) => {
+    if (deleteTarget !== id) return
+    await deleteProject.mutateAsync(id)
+    setDeleteTarget(null)
+  }
+
+  const confirmDelete = (id: string) => setDeleteTarget(id)
+
+  if (isLoading || authLoading) return (
     <div className="flex flex-col gap-4">
       <Skeleton className="h-8 w-40" />
       {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-32" />)}
@@ -158,9 +153,10 @@ export default function ProjectsPage() {
             <Select value={selectedSession} onValueChange={setSelectedSession}>
               <SelectTrigger><SelectValue placeholder="Sélectionner une session" /></SelectTrigger>
               <SelectContent>
-                {sessions.map(s => (
+                {sessions?.map(s => (
                   <SelectItem key={s.id} value={s.id}>
                     {s.name} — <span className="capitalize">{s.academic_level}</span>
+                    {s.academic_year && <span> — {s.academic_year}e année</span>}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -206,6 +202,7 @@ export default function ProjectsPage() {
                         {project.sessions && (
                           <CardDescription className="text-xs">
                             {project.sessions.name} · <span className="capitalize">{project.sessions.academic_level}</span>
+                            {project.sessions.academic_year && <span> · {project.sessions.academic_year}e année</span>}
                           </CardDescription>
                         )}
                       </div>
@@ -228,6 +225,9 @@ export default function ProjectsPage() {
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleStatusChange(project.id, 'archived')}>
                             Archiver
+                          </DropdownMenuItem>
+                          <DropdownMenuItem variant="destructive" onClick={() => confirmDelete(project.id)}>
+                            <Trash2 className="size-4" /> Supprimer
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -277,6 +277,21 @@ export default function ProjectsPage() {
           <Button variant="outline" onClick={handleLoadMore}>Voir plus</Button>
         </div>
       )}
+
+      <Dialog open={deleteTarget !== null} onOpenChange={o => { if (!o) setDeleteTarget(null) }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Supprimer ce projet ?</DialogTitle>
+            <DialogDescription>
+              Cette action est irréversible. Le brief et toutes les données associées seront définitivement supprimés.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteTarget(null)}>Annuler</Button>
+            <Button variant="destructive" onClick={() => deleteTarget && handleDelete(deleteTarget)}>Supprimer</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

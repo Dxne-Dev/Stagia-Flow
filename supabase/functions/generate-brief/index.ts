@@ -18,6 +18,23 @@ const LEVEL_PROMPTS: Record<string, string> = {
   doctorat: "Missions de R&D avancées : études prospectives, benchmarks approfondis, recherche appliquée, prototypage innovant, publications internes.",
 };
 
+const YEAR_GUIDANCE: Record<string, Record<number, string>> = {
+  licence: {
+    1: "Débutant (L1) : tout premier contact avec le monde professionnel. Tâches très élémentaires et fortement encadrées pas à pas.",
+    2: "Intermédiaire (L2) : premières responsabilités sur des sous-tâches identifiées. Autonomie partielle avec des points de contrôle réguliers.",
+    3: "Avancé (L3) : pré-professionnalisation. Capable de gérer un projet complet de bout en bout avec une supervision allégée.",
+  },
+  master: {
+    1: "Senior (M1) : missions à forte valeur ajoutée, conception de solutions, développement de modules ou fonctionnalités.",
+    2: "Expert (M2) : autonomie quasi-totale, pilotage de projet, analyse stratégique, préparation à l'insertion professionnelle.",
+  },
+  doctorat: {
+    1: "Début de doctorat : cadrage du sujet, revue de littérature systématique, définition de la méthodologie de recherche.",
+    2: "Milieu de doctorat : collecte et analyse des données, expérimentations, rédaction de publications scientifiques.",
+    3: "Fin de doctorat : rédaction de la thèse, valorisation des résultats, préparation de la soutenance.",
+  },
+};
+
 async function callLLM(prompt: string, config: ProviderConfig): Promise<string | null> {
   const start = Date.now()
   console.log(`[generate-brief] Calling ${config.model} via ${config.endpoint}`)
@@ -56,7 +73,7 @@ function parseResponse(content: string): Record<string, unknown> | null {
   }
 }
 
-function buildPrompt(sector: string, activities: string, stack: string, projects: string, summary: string, academicLevel: string, levelGuidance: string, seed: number): string {
+function buildPrompt(sector: string, activities: string, stack: string, projects: string, summary: string, academicLevel: string, levelGuidance: string, yearGuidance: string, seed: number): string {
   return `Tu es un expert en pédagogie et en gestion de stages. Génère un brief de projet de stage complet et structuré en français.
 
 Contexte entreprise :
@@ -68,6 +85,7 @@ Contexte entreprise :
 
 Niveau académique du stagiaire : ${academicLevel}
 Guidance pédagogique : ${levelGuidance}
+${yearGuidance}
 Seed d'unicité : ${seed}
 
 IMPORTANT : Ce brief DOIT être différent des précédents. Propose un projet original, créatif et adapté à ce contexte.
@@ -83,11 +101,11 @@ Réponds UNIQUEMENT avec le JSON brut, SANS markdown, SANS code fences, SANS tex
 }`;
 }
 
-function buildFallback(sector: string, academicLevel: string, stack: string): {
+function buildFallback(sector: string, academicLevel: string, stack: string, academicYear: number | null): {
   title: string; context_objective: string; instructions: string; deliverable_type: string; deadline: string
 } {
   const deadline = new Date();
-  deadline.setMonth(deadline.getMonth() + 3);
+  deadline.setMonth(deadline.getMonth() + (academicYear ? academicYear * 2 : 3));
   const hash = (Date.now() % 7) + Math.floor(Math.random() * 5)
 
   const templates: Array<{
@@ -157,8 +175,9 @@ function buildFallback(sector: string, academicLevel: string, stack: string): {
 
   const idx = hash % templates.length
   const tpl = templates[idx]
+  const yearLabel = academicYear ? ` — ${academicLevel.charAt(0).toUpperCase() + academicLevel.slice(1)} ${academicYear}e année` : ` — ${academicLevel.charAt(0).toUpperCase() + academicLevel.slice(1)}`
   return {
-    title: `${tpl.t} — ${academicLevel.charAt(0).toUpperCase() + academicLevel.slice(1)}`,
+    title: `${tpl.t}${yearLabel}`,
     context_objective: tpl.o,
     instructions: tpl.i.map((step, i) => `${i + 1}. ${step}`).join("\n"),
     deliverable_type: tpl.dt,
@@ -172,7 +191,7 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const { session_id, org_context, academic_level } = await req.json();
+    const { session_id, org_context, academic_level, academic_year } = await req.json();
 
     if (!session_id || !academic_level) {
       return new Response(JSON.stringify({ error: "session_id and academic_level are required" }), {
@@ -182,6 +201,9 @@ Deno.serve(async (req: Request) => {
     }
 
     const levelGuidance = LEVEL_PROMPTS[academic_level] ?? LEVEL_PROMPTS["master"];
+    const yearGuidance = (academic_year && YEAR_GUIDANCE[academic_level]?.[academic_year])
+      ? `Année dans le cycle : ${academic_year}. Guidance spécifique à l'année : ${YEAR_GUIDANCE[academic_level][academic_year]}`
+      : "";
     const sector = org_context?.sector ?? "Technologie";
     const activities = (org_context?.main_activities ?? []).join(", ");
     const stack = (org_context?.tech_stack ?? []).join(", ");
@@ -205,7 +227,7 @@ Deno.serve(async (req: Request) => {
 
     if (providers.length > 0) {
       const seed = Date.now() + Math.floor(Math.random() * 100000)
-      const prompt = buildPrompt(sector, activities, stack, projects, summary, academic_level, levelGuidance, seed);
+      const prompt = buildPrompt(sector, activities, stack, projects, summary, academic_level, levelGuidance, yearGuidance, seed);
       console.log(`[generate-brief] Prompt built, seed=${seed}, length=${prompt.length}`)
 
       for (const provider of providers) {
@@ -246,7 +268,7 @@ Deno.serve(async (req: Request) => {
 
     if (!brief) {
       console.warn(`[generate-brief] All providers failed, using fallback`)
-      brief = buildFallback(sector, academic_level, stack);
+      brief = buildFallback(sector, academic_level, stack, academic_year);
     }
 
     return new Response(JSON.stringify(brief), {

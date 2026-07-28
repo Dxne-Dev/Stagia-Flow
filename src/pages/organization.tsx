@@ -1,6 +1,5 @@
 import * as React from 'react'
-import { Globe, Pencil, Save, X, Sparkles, RefreshCw } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { Globe, Pencil, Save, X, Sparkles, RefreshCw, Zap } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -8,56 +7,44 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Field, FieldLabel } from '@/components/ui/field'
-import type { Organization } from '@/lib/supabase'
+import { useOrganization, useUpdateOrganization } from '@/hooks'
+import { PLAN_LABELS, PLAN_PRICES } from '@/lib/plan-utils'
+
+interface OrgContext {
+  sector?: string
+  summary?: string
+  main_activities?: string[]
+  tech_stack?: string[]
+  recent_projects?: string[]
+}
 
 export default function OrganizationPage() {
   const { profile, loading: authLoading } = useAuth()
-  const [org, setOrg] = React.useState<Organization | null>(null)
-  const [loading, setLoading] = React.useState(true)
+  const { data: org, isLoading } = useOrganization(profile?.organization_id)
+  const updateOrg = useUpdateOrganization()
   const [editing, setEditing] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
   const [name, setName] = React.useState('')
   const [url, setUrl] = React.useState('')
 
   React.useEffect(() => {
-    const load = async () => {
-      if (authLoading) return
-      if (!profile?.organization_id) { setLoading(false); return }
-      const { data } = await supabase.from('organizations').select('*').eq('id', profile.organization_id).maybeSingle()
-      if (data) {
-        setOrg(data)
-        setName(data.name)
-        setUrl(data.website_url ?? '')
-      }
-      setLoading(false)
+    if (org) {
+      setName(org.name)
+      setUrl(org.website_url ?? '')
     }
-    load()
-  }, [profile, authLoading])
+  }, [org])
 
   const handleSave = async () => {
     if (!org) return
     setSaving(true)
-    const { data } = await supabase
-      .from('organizations')
-      .update({ name, website_url: url || null })
-      .eq('id', org.id)
-      .select()
-      .single()
-    if (data) setOrg(data)
+    await updateOrg.mutateAsync({ id: org.id, name, website_url: url || null })
     setEditing(false)
     setSaving(false)
   }
 
-  interface OrgContext {
-    sector?: string
-    summary?: string
-    main_activities?: string[]
-    tech_stack?: string[]
-    recent_projects?: string[]
-  }
   const ctx = org?.ai_context_json as OrgContext | null
 
-  if (loading) return (
+  if (authLoading || isLoading) return (
     <div className="flex flex-col gap-4">
       <Skeleton className="h-8 w-48" />
       <Skeleton className="h-48" />
@@ -133,6 +120,28 @@ export default function OrganizationPage() {
         </CardContent>
       </Card>
 
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Zap className="size-4 text-primary" />
+            Plan & Abonnement
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <Badge variant={org.plan === 'essentiel' ? 'outline' : 'default'} className="capitalize text-sm px-3 py-1">
+              {PLAN_LABELS[org.plan]}
+            </Badge>
+            <span className="text-sm text-muted-foreground">{PLAN_PRICES[org.plan]}</span>
+          </div>
+          {org.plan === 'essentiel' && (
+            <Button size="sm" asChild>
+              <a href="#pricing"><Zap className="size-4" /> Passer à Pro</a>
+            </Button>
+          )}
+        </CardContent>
+      </Card>
+
       {ctx && (
         <Card>
           <CardHeader>
@@ -163,7 +172,7 @@ export default function OrganizationPage() {
                 <p className="text-sm">{ctx.summary}</p>
               </div>
             )}
-            {Array.isArray(ctx.main_activities) && (ctx.main_activities as string[]).length > 0 && (
+            {Array.isArray(ctx.main_activities) && ctx.main_activities.length > 0 && (
               <div>
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Activités principales</p>
                 <div className="flex flex-wrap gap-1.5">

@@ -1,25 +1,17 @@
 import * as React from 'react'
-import { CheckCircle2, Clock, XCircle, ExternalLink, MessageSquare, MoreHorizontal, FileText } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { CheckCircle2, Clock, XCircle, ExternalLink, MessageSquare, FileText } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
-import type { Deliverable, Project, UserProfile } from '@/lib/supabase'
+import { useDeliverablesReview, useUpdateDeliverableStatus } from '@/hooks'
+import type { DeliverableStatus } from '@/types'
 
 type Tab = 'all' | 'pending' | 'validated' | 'rejected'
-
-interface DeliverableWithJoins extends Deliverable {
-  projects: Pick<Project, 'title' | 'session_id'> & { sessions: { name: string } }
-  user_profiles: Pick<UserProfile, 'full_name' | 'email'>
-}
 
 const STATUS_CONFIG = {
   submitted: { label: 'Soumis', icon: Clock, variant: 'secondary' as const },
@@ -35,62 +27,47 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'rejected', label: 'Refusés' },
 ]
 
+interface DeliverableWithJoins {
+  id: string
+  project_id: string
+  user_id: string
+  file_url: string | null
+  notes: string | null
+  status: DeliverableStatus
+  submitted_at: string
+  reviewed_at: string | null
+  reviewed_by: string | null
+  projects: { title: string; session_id: string; sessions: { name: string } } | null
+  user_profiles: { full_name: string | null; email: string | null } | null
+}
+
 export default function DeliverablesReviewPage() {
   const { profile, loading: authLoading } = useAuth()
-  const [deliverables, setDeliverables] = React.useState<DeliverableWithJoins[]>([])
-  const [loading, setLoading] = React.useState(true)
+  const [page, setPage] = React.useState(0)
+  const { data, isLoading } = useDeliverablesReview(profile?.organization_id, page)
+  const updateStatus = useUpdateDeliverableStatus()
+
+  const deliverables = (data?.data ?? []) as DeliverableWithJoins[]
+  const count = data?.count
+  const hasMore = count != null && (page + 1) * 20 < count
+
   const [activeTab, setActiveTab] = React.useState<Tab>('pending')
   const [rejectDialog, setRejectDialog] = React.useState<DeliverableWithJoins | null>(null)
   const [rejectReason, setRejectReason] = React.useState('')
-  const [page, setPage] = React.useState(0)
-  const [hasMore, setHasMore] = React.useState(true)
-  const PAGE_SIZE = 20
 
-  const load = React.useCallback(async (pageNum: number) => {
-    if (authLoading) return
-    if (!profile?.organization_id) { setLoading(false); return }
-    const from = pageNum * PAGE_SIZE
-    const to = from + PAGE_SIZE - 1
-    const { data, count } = await supabase
-      .from('deliverables')
-      .select('*, projects!inner(title, session_id, sessions!inner(name)), user_profiles!inner(full_name, email)', { count: 'exact', head: false })
-      .eq('projects.sessions.organization_id', profile.organization_id)
-      .order('submitted_at', { ascending: false })
-      .range(from, to)
-    if (pageNum === 0) {
-      setDeliverables(data ?? [])
-    } else {
-      setDeliverables(prev => [...prev, ...(data ?? [])])
-    }
-    setHasMore(count != null && (pageNum + 1) * PAGE_SIZE < count)
-    setLoading(false)
-  }, [profile, authLoading])
+  const handleLoadMore = () => setPage(p => p + 1)
 
-  React.useEffect(() => { load(0) }, [load])
-
-  const handleLoadMore = () => {
-    const nextPage = page + 1
-    setPage(nextPage)
-    load(nextPage)
-  }
-
-  const handleAction = async (d: DeliverableWithJoins, status: Deliverable['status'], notes?: string) => {
-    const update: Partial<Deliverable> = { status }
-    if (status === 'validated' || status === 'rejected') {
-      update.reviewed_at = new Date().toISOString()
-      update.reviewed_by = profile!.id
-    }
-    if (notes !== undefined) update.notes = notes
-
-    await supabase.from('deliverables').update(update).eq('id', d.id)
-    setDeliverables(prev => prev.map(item =>
-      item.id === d.id ? { ...item, ...update } as DeliverableWithJoins : item
-    ))
+  const handleAction = async (d: DeliverableWithJoins, status: DeliverableStatus) => {
+    await updateStatus.mutateAsync({
+      id: d.id,
+      status,
+      reviewedBy: profile!.id,
+    })
   }
 
   const handleReject = () => {
     if (!rejectDialog) return
-    handleAction(rejectDialog, 'rejected', rejectReason.trim() || null)
+    handleAction(rejectDialog, 'rejected')
     setRejectDialog(null)
     setRejectReason('')
   }
@@ -101,7 +78,7 @@ export default function DeliverablesReviewPage() {
       ? deliverables.filter(d => d.status === 'submitted' || d.status === 'under_review')
       : deliverables.filter(d => d.status === activeTab)
 
-  if (loading) return (
+  if (isLoading || authLoading) return (
     <div className="flex flex-col gap-4">
       <Skeleton className="h-8 w-56" />
       <Skeleton className="h-12 w-96" />
@@ -114,7 +91,7 @@ export default function DeliverablesReviewPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Révision des livrables</h1>
         <p className="text-muted-foreground text-sm mt-0.5">
-          {deliverables.length} livrable{deliverables.length > 1 ? 's' : ''} soumis
+          {count ?? deliverables.length} livrable{deliverables.length > 1 ? 's' : ''} soumis
         </p>
       </div>
 
@@ -153,7 +130,7 @@ export default function DeliverablesReviewPage() {
           {filtered.map(d => {
             const cfg = STATUS_CONFIG[d.status]
             const Icon = cfg.icon
-            const initials = (d.user_profiles.full_name ?? '?').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
+            const initials = (d.user_profiles?.full_name ?? '?').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
             return (
               <Card key={d.id}>
                 <CardContent className="pt-6">
@@ -163,8 +140,8 @@ export default function DeliverablesReviewPage() {
                         <AvatarFallback className="text-xs">{initials}</AvatarFallback>
                       </Avatar>
                       <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{d.user_profiles.full_name ?? 'Nom inconnu'}</p>
-                        <p className="text-xs text-muted-foreground truncate">{d.user_profiles.email ?? '—'}</p>
+                        <p className="text-sm font-medium truncate">{d.user_profiles?.full_name ?? 'Nom inconnu'}</p>
+                        <p className="text-xs text-muted-foreground truncate">{d.user_profiles?.email ?? '—'}</p>
                       </div>
                     </div>
                     <Badge variant={cfg.variant} className="gap-1 shrink-0">
@@ -238,7 +215,7 @@ export default function DeliverablesReviewPage() {
           <DialogHeader>
             <DialogTitle>Refuser le livrable</DialogTitle>
             <DialogDescription>
-              Indiquez le motif du refus à {rejectDialog?.user_profiles.full_name ?? 'l\'étudiant'}.
+              Indiquez le motif du refus à {rejectDialog?.user_profiles?.full_name ?? 'l\'étudiant'}.
             </DialogDescription>
           </DialogHeader>
           <Textarea

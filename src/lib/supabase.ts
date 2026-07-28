@@ -22,6 +22,8 @@ export type UserRole = 'admin' | 'manager' | 'stagiaire'
 export type ProjectStatus = 'draft' | 'active' | 'archived'
 export type DeliverableStatus = 'submitted' | 'under_review' | 'validated' | 'rejected'
 export type DeliverableType = 'pdf' | 'git' | 'spreadsheet' | 'presentation' | 'other'
+export type Plan = 'essentiel' | 'pro' | 'entreprise'
+export type SubscriptionStatus = 'active' | 'past_due' | 'canceled' | 'expired'
 
 export interface Organization {
   id: string
@@ -29,6 +31,8 @@ export interface Organization {
   website_url: string | null
   ai_context_json: Record<string, unknown> | null
   owner_id: string
+  plan: Plan
+  subscription_status: SubscriptionStatus | null
   created_at: string
 }
 
@@ -37,6 +41,7 @@ export interface Session {
   organization_id: string
   name: string
   academic_level: AcademicLevel
+  academic_year: number | null
   department: string | null
   invite_token: string
   created_at: string

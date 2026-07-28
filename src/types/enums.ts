@@ -1,0 +1,7 @@
+export type AcademicLevel = 'licence' | 'master' | 'doctorat'
+export type UserRole = 'admin' | 'manager' | 'stagiaire'
+export type ProjectStatus = 'draft' | 'active' | 'archived'
+export type DeliverableStatus = 'submitted' | 'under_review' | 'validated' | 'rejected'
+export type DeliverableType = 'pdf' | 'git' | 'spreadsheet' | 'presentation' | 'other'
+export type Plan = 'essentiel' | 'pro' | 'entreprise'
+export type SubscriptionStatus = 'active' | 'past_due' | 'canceled' | 'expired'
