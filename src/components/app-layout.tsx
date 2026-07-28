@@ -75,9 +75,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <Sidebar>
         <SidebarHeader>
           <div className="flex items-center gap-2 px-2 py-1">
-            <div className="size-7 rounded-md bg-primary flex items-center justify-center shrink-0">
-              <LogoIcon className="size-full object-contain" />
-            </div>
+            <LogoIcon className="size-5" />
             <span className="font-semibold text-sm">StagePilot</span>
           </div>
         </SidebarHeader>

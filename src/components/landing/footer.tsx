@@ -35,9 +35,7 @@ export default function LandingFooter() {
         <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
           <div>
             <div className="flex items-center gap-2">
-              <div className="flex size-7 items-center justify-center rounded-md bg-primary">
-                <LogoIcon className="size-full object-contain" />
-              </div>
+              <LogoIcon className="size-5" />
               <span className="font-semibold text-sm">StagePilot</span>
             </div>
             <p className="mt-3 text-xs text-muted-foreground leading-relaxed max-w-xs">
