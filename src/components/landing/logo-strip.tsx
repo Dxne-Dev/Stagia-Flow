@@ -1,12 +1,12 @@
 import { useTheme } from '@/components/theme-provider'
 
 const logos = [
-  { name: 'Google', src: '/svg/google.svg' },
-  { name: 'GitHub', src: '/svg/github_light.svg', darkSrc: '/svg/github_dark.svg' },
-  { name: 'Vercel', src: '/svg/vercel.svg', darkSrc: '/svg/vercel_dark.svg' },
-  { name: 'Figma', src: '/svg/figma.svg' },
-  { name: 'Notion', src: '/svg/notion.svg' },
-  { name: 'Stripe', src: '/svg/stripe.svg' },
+  { name: 'Google', src: '/svg/google.svg', w: 268, h: 274 },
+  { name: 'GitHub', src: '/svg/github_light.svg', darkSrc: '/svg/github_dark.svg', w: 64, h: 64 },
+  { name: 'Vercel', src: '/svg/vercel.svg', darkSrc: '/svg/vercel_dark.svg', w: 256, h: 222 },
+  { name: 'Figma', src: '/svg/figma.svg', w: 54, h: 80 },
+  { name: 'Notion', src: '/svg/notion.svg', w: 256, h: 268 },
+  { name: 'Stripe', src: '/svg/stripe.svg', w: 256, h: 256 },
 ]
 
 export default function LogoStrip() {
@@ -24,11 +24,13 @@ export default function LogoStrip() {
         </p>
         <div className="overflow-hidden mask-fade-x group">
           <div className="flex animate-scroll">
-            {items.map(({ name, src, darkSrc }, i) => (
+            {items.map(({ name, src, darkSrc, w, h }, i) => (
               <img
                 key={`${name}-${i}`}
                 src={isDark && darkSrc ? darkSrc : src}
                 alt={name}
+                width={w}
+                height={h}
                 className="mx-10 h-7 w-auto shrink-0 opacity-30 grayscale transition-all duration-300"
               />
             ))}

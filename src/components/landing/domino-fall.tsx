@@ -9,7 +9,7 @@ export default function DominoFall({
 }) {
   const chars = text.split('')
   return (
-    <motion.span className={className} aria-label={text}>
+    <motion.span className={className} role="text" aria-label={text}>
       {chars.map((char, i) => (
         <motion.span
           key={i}
