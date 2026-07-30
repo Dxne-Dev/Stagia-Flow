@@ -1,4 +1,3 @@
-import * as React from 'react'
 import type { Plan } from '@/types'
 import { AI_DAILY_LIMITS } from '@/lib/plan-utils'
 import { cn } from '@/lib/utils'
@@ -32,9 +31,7 @@ export function AvatarWithCredits({ plan, usedCredits, size = 'default', classNa
   const cx = svgSize / 2
   const cy = svgSize / 2
   const ringR = svgSize / 2 - 3
-  const avatarR = px / 2
   const totalLimit = AI_DAILY_LIMITS[plan]
-  const isUnlimited = totalLimit === Infinity
   const consumed = Math.min(usedCredits, totalLimit)
   const remaining = Math.max(0, totalLimit - consumed)
 
