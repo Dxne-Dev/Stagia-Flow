@@ -18,7 +18,7 @@ import { useSessionsList, useProjects, useUpdateProjectStatus, useDeleteProject,
 import { organizationService } from '@/services'
 import { projectService } from '@/services'
 import { invokeEdgeFunction } from '@/lib/edge-functions'
-import { isLimitError } from '@/lib/plan-utils'
+import { isLimitError, isCreditLimitError } from '@/lib/plan-utils'
 import type { DeliverableType, ProjectStatus } from '@/types'
 import type { GenerateBriefRequest, GenerateBriefResponse } from '@/types/edge-functions'
 
@@ -92,6 +92,7 @@ export default function ProjectsPage() {
         org_context: org.ai_context_json,
         academic_level: sess.academic_level,
         academic_year: sess.academic_year,
+        organization_id: org.id,
       })
 
       await projectService.create({
@@ -109,7 +110,7 @@ export default function ProjectsPage() {
       setSelectedSession('')
       refetch()
     } catch (e: unknown) {
-      const msg = isLimitError(e)
+      const msg = isLimitError(e) ?? isCreditLimitError(e)
       setGenError(msg ?? (e instanceof Error ? e.message : 'Erreur inconnue'))
     } finally {
       setGenerating(false)

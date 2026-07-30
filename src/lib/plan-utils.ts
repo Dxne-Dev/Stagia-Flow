@@ -45,9 +45,33 @@ export function canCreateProject(plan: Plan, currentCount: number): { allowed: b
   return { allowed: currentCount < limit, remaining: Math.max(0, limit - currentCount) }
 }
 
+export const AI_DAILY_LIMITS: Record<Plan, number> = {
+  essentiel: 5,
+  pro: 100,
+  entreprise: Infinity,
+}
+
+export const AI_ANALYSIS_LIMIT = 3
+
+export function getRemainingAiCalls(plan: Plan, used: number): { allowed: boolean; remaining: number } {
+  const limit = AI_DAILY_LIMITS[plan]
+  return { allowed: used < limit, remaining: Math.max(0, limit - used) }
+}
+
+export function getAnalysisRemaining(currentCount: number): { allowed: boolean; remaining: number } {
+  return { allowed: currentCount < AI_ANALYSIS_LIMIT, remaining: Math.max(0, AI_ANALYSIS_LIMIT - currentCount) }
+}
+
 export function isLimitError(error: unknown): string | null {
   if (error instanceof Error && error.message.startsWith('LIMIT_REACHED:')) {
     return error.message.slice('LIMIT_REACHED:'.length)
+  }
+  return null
+}
+
+export function isCreditLimitError(error: unknown): string | null {
+  if (error instanceof Error && error.message.startsWith('CREDIT_LIMIT_REACHED:')) {
+    return error.message.slice('CREDIT_LIMIT_REACHED:'.length)
   }
   return null
 }

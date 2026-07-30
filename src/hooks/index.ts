@@ -1,4 +1,4 @@
-export { useOrganization, useUpdateOrganization } from './use-organization'
+export { useOrganization, useOrgDailyUsage, useUpdateOrganization } from './use-organization'
 export { useSessions, useSessionsList, useSession, useCreateSession, useDeleteSession } from './use-sessions'
 export { useProjects, useRecentProjects, useSessionProjects, useActiveProjects, useSessionProjectsNonArchived, useUpdateProjectStatus, useDeleteProject, useCreateProject } from './use-projects'
 export { useProjectDetail } from './use-project-detail'

@@ -8,6 +8,7 @@ export interface Organization {
   owner_id: string
   plan: Plan
   subscription_status: SubscriptionStatus | null
+  analysis_count: number
   created_at: string
 }
 

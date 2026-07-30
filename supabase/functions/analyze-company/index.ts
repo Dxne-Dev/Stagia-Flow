@@ -1,4 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -76,7 +77,7 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const { url, org_name } = await req.json();
+    const { url, org_name, organization_id } = await req.json();
     const groqKey = Deno.env.get("GROQ_API_KEY");
     const openrouterKey = Deno.env.get("OPENROUTER_API_KEY");
 
@@ -85,6 +86,23 @@ Deno.serve(async (req: Request) => {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    if (organization_id) {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL");
+      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      if (supabaseUrl && serviceKey) {
+        const sb = createClient(supabaseUrl, serviceKey);
+        const { data: org } = await sb.from("organizations").select("analysis_count").eq("id", organization_id).maybeSingle();
+        if (org && org.analysis_count >= 3) {
+          return new Response(JSON.stringify({
+            error: "CREDIT_LIMIT_REACHED:Vous avez atteint la limite de 3 analyses d'organisation. Contactez-nous pour débloquer cette fonctionnalité.",
+          }), {
+            status: 429,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      }
     }
 
     const pageContent = url ? await scrapeWebsite(url) : "";
@@ -110,6 +128,18 @@ Deno.serve(async (req: Request) => {
 
     if (!result) {
       result = buildFallback(org_name);
+    }
+
+    if (organization_id && result !== null) {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL");
+      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      if (supabaseUrl && serviceKey) {
+        const sb = createClient(supabaseUrl, serviceKey);
+        const { data: org } = await sb.from("organizations").select("analysis_count").eq("id", organization_id).maybeSingle();
+        if (org) {
+          await sb.from("organizations").update({ analysis_count: org.analysis_count + 1 }).eq("id", organization_id);
+        }
+      }
     }
 
     return new Response(JSON.stringify(result), {

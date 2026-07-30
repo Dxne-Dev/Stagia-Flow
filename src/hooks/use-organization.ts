@@ -10,6 +10,14 @@ export function useOrganization(orgId: string | null | undefined) {
   })
 }
 
+export function useOrgDailyUsage(orgId: string | null | undefined) {
+  return useQuery({
+    queryKey: ['org-daily-usage', orgId],
+    queryFn: () => organizationService.getDailyUsage(orgId!),
+    enabled: !!orgId,
+  })
+}
+
 export function useUpdateOrganization() {
   const queryClient = useQueryClient()
   return useMutation({

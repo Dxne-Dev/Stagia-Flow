@@ -1,6 +1,7 @@
 export interface AnalyzeCompanyRequest {
   url: string
   org_name: string
+  organization_id: string
 }
 
 export interface AiContext {
@@ -16,6 +17,7 @@ export interface GenerateBriefRequest {
   org_context: Record<string, unknown> | null
   academic_level: string
   academic_year: number | null
+  organization_id: string
 }
 
 export interface GenerateBriefResponse {
@@ -24,4 +26,5 @@ export interface GenerateBriefResponse {
   instructions: string
   deliverable_type: string
   deadline: string
+  remaining_credits: number
 }

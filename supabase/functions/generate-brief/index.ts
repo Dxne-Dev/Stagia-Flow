@@ -1,4 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -191,13 +192,40 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const { session_id, org_context, academic_level, academic_year } = await req.json();
+    const { session_id, org_context, academic_level, academic_year, organization_id } = await req.json();
 
     if (!session_id || !academic_level) {
       return new Response(JSON.stringify({ error: "session_id and academic_level are required" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    let remainingCredits = Infinity;
+
+    if (organization_id) {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL");
+      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      if (supabaseUrl && serviceKey) {
+        const sb = createClient(supabaseUrl, serviceKey);
+        const { data: org } = await sb.from("organizations").select("plan").eq("id", organization_id).maybeSingle();
+        const plan = org?.plan ?? "essentiel";
+
+        if (plan !== "entreprise") {
+          const maxCalls = plan === "pro" ? 100 : 5;
+          const { data: result } = await sb.rpc("increment_ai_calls", { org_id: organization_id, max_calls: maxCalls });
+          const row = result?.[0];
+          if (!row?.allowed) {
+            return new Response(JSON.stringify({
+              error: `CREDIT_LIMIT_REACHED:Vous avez atteint la limite de ${maxCalls} générations IA par jour sur le plan actuel. Passez à une formule supérieure pour un plus grand nombre de générations.`,
+            }), {
+              status: 429,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
+          remainingCredits = row.remaining;
+        }
+      }
     }
 
     const levelGuidance = LEVEL_PROMPTS[academic_level] ?? LEVEL_PROMPTS["master"];
@@ -271,7 +299,7 @@ Deno.serve(async (req: Request) => {
       brief = buildFallback(sector, academic_level, stack, academic_year);
     }
 
-    return new Response(JSON.stringify(brief), {
+    return new Response(JSON.stringify({ ...brief, remaining_credits: remainingCredits }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {

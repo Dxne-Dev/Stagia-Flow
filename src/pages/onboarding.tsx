@@ -31,7 +31,7 @@ export default function OnboardingPage() {
     setStep('scraping')
 
     try {
-      let context: AiContext = {
+      const defaultContext: AiContext = {
         sector: 'Technologie & Innovation',
         main_activities: ['Développement logiciel', 'Conseil digital', 'Intégration système'],
         tech_stack: ['React', 'Node.js', 'PostgreSQL', 'Docker'],
@@ -39,25 +39,31 @@ export default function OnboardingPage() {
         summary: `${orgName} est une organisation opérant dans un secteur dynamique. Elle s'appuie sur des technologies modernes pour livrer des projets à forte valeur ajoutée.`,
       }
 
+      const org = await organizationService.create({
+        name: orgName,
+        website_url: websiteUrl || null,
+        ai_context_json: defaultContext as Record<string, unknown>,
+        owner_id: user!.id,
+      })
+      setOrgId(org.id)
+
+      let context = defaultContext
+
       if (websiteUrl) {
         try {
           const data = await invokeEdgeFunction<AnalyzeCompanyRequest, AiContext>('analyze-company', {
             url: websiteUrl,
             org_name: orgName,
+            organization_id: org.id,
           })
-          if (data.sector) context = data
+          if (data.sector) {
+            context = data
+            await organizationService.update(org.id, { ai_context_json: context as Record<string, unknown> })
+          }
         } catch {
           // fallback to default context
         }
       }
-
-      const org = await organizationService.create({
-        name: orgName,
-        website_url: websiteUrl || null,
-        ai_context_json: context as Record<string, unknown>,
-        owner_id: user!.id,
-      })
-      setOrgId(org.id)
 
       await profileService.update(user!.id, { organization_id: org.id, role: 'admin' })
 

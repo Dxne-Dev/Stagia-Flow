@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Globe, Pencil, Save, X, Sparkles, RefreshCw, Zap } from 'lucide-react'
+import { Globe, Pencil, Save, X, Sparkles, RefreshCw, Zap, BarChart3 } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -7,8 +7,12 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Field, FieldLabel } from '@/components/ui/field'
-import { useOrganization, useUpdateOrganization } from '@/hooks'
-import { PLAN_LABELS, PLAN_PRICES } from '@/lib/plan-utils'
+import { Progress } from '@/components/ui/progress'
+import { Spinner } from '@/components/ui/spinner'
+import { useOrganization, useOrgDailyUsage, useUpdateOrganization } from '@/hooks'
+import { invokeEdgeFunction } from '@/lib/edge-functions'
+import { PLAN_LABELS, PLAN_PRICES, AI_DAILY_LIMITS, getAnalysisRemaining, isCreditLimitError } from '@/lib/plan-utils'
+import type { AiContext, AnalyzeCompanyRequest } from '@/types/edge-functions'
 
 interface OrgContext {
   sector?: string
@@ -43,6 +47,37 @@ export default function OrganizationPage() {
   }
 
   const ctx = org?.ai_context_json as OrgContext | null
+
+  const { data: dailyUsage } = useOrgDailyUsage(profile?.organization_id)
+  const [regenerating, setRegenerating] = React.useState(false)
+  const [regenerateError, setRegenerateError] = React.useState<string | null>(null)
+
+  const handleRegenerate = async () => {
+    if (!org || !org.website_url || regenerating) return
+    setRegenerating(true)
+    setRegenerateError(null)
+    try {
+      const data = await invokeEdgeFunction<AnalyzeCompanyRequest, AiContext>('analyze-company', {
+        url: org.website_url,
+        org_name: org.name,
+        organization_id: org.id,
+      })
+      if (data.sector) {
+        await updateOrg.mutateAsync({ id: org.id, ai_context_json: data as Record<string, unknown> })
+      }
+    } catch (e: unknown) {
+      const creditMsg = isCreditLimitError(e)
+      setRegenerateError(creditMsg ?? (e instanceof Error ? e.message : 'Erreur lors de l\'analyse'))
+    } finally {
+      setRegenerating(false)
+    }
+  }
+
+  const plan = org?.plan ?? 'essentiel'
+  const dailyLimit = AI_DAILY_LIMITS[plan]
+  const usedCredits = dailyUsage ?? 0
+  const analysisRemaining = getAnalysisRemaining(org?.analysis_count ?? 3)
+  const isUnlimited = dailyLimit === Infinity
 
   if (authLoading || isLoading) return (
     <div className="flex flex-col gap-4">
@@ -142,6 +177,34 @@ export default function OrganizationPage() {
         </CardContent>
       </Card>
 
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <BarChart3 className="size-4 text-primary" />
+            Crédits IA
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {isUnlimited ? (
+            <div className="flex items-center gap-3">
+              <Badge variant="secondary" className="text-sm px-3 py-1">
+                <Sparkles className="size-3.5 mr-1.5" />
+                Illimité
+              </Badge>
+              <span className="text-sm text-muted-foreground">Générations IA sans limite</span>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Générations IA aujourd'hui</span>
+                <span className="font-medium tabular-nums">{usedCredits}/{dailyLimit}</span>
+              </div>
+              <Progress value={(usedCredits / dailyLimit) * 100} className="h-2" />
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {ctx && (
         <Card>
           <CardHeader>
@@ -153,13 +216,21 @@ export default function OrganizationPage() {
                 </CardTitle>
                 <CardDescription>Extrait automatiquement depuis votre site web</CardDescription>
               </div>
-              <Button variant="outline" size="sm">
-                <RefreshCw className="size-4" />
-                Régénérer
-              </Button>
+              <div className="flex items-center gap-2">
+                {org.website_url && (
+                  <span className="text-xs text-muted-foreground tabular-nums">{analysisRemaining.remaining}/{analysisRemaining.remaining + (org?.analysis_count ?? 0)} analyses</span>
+                )}
+                <Button variant="outline" size="sm" onClick={handleRegenerate} disabled={regenerating || !org.website_url || !analysisRemaining.allowed}>
+                  {regenerating ? <Spinner className="size-4" /> : <RefreshCw className="size-4" />}
+                  Régénérer
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
+            {regenerateError && (
+              <div className="rounded-md bg-destructive/10 border border-destructive/20 px-3 py-2 text-sm text-destructive">{regenerateError}</div>
+            )}
             {ctx.sector && (
               <div>
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1.5">Secteur</p>

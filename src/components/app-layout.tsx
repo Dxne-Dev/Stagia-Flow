@@ -27,11 +27,12 @@ import {
   SidebarInset,
   SidebarTrigger,
 } from '@/components/ui/sidebar'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Separator } from '@/components/ui/separator'
 import { useAuth } from '@/lib/auth-context'
 import { LogoIcon } from '@/components/ui/logo-icon'
+import { AvatarWithCredits } from '@/components/avatar-with-credits'
+import { useOrganization, useOrgDailyUsage } from '@/hooks'
 
 interface NavItem {
   title: string
@@ -53,14 +54,11 @@ const stagiaireNav: NavItem[] = [
   { title: 'Mes Livrables', url: '/my-deliverables', icon: Upload },
 ]
 
-function getInitials(name: string | null | undefined) {
-  if (!name) return '?'
-  return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
-}
-
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, profile, signOut } = useAuth()
   const navigate = useNavigate()
+  const { data: org } = useOrganization(profile?.organization_id)
+  const { data: dailyUsage } = useOrgDailyUsage(profile?.organization_id)
 
   const handleSignOut = async () => {
     await signOut()
@@ -110,11 +108,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <SidebarMenuButton size="lg">
-                    <Avatar className="size-7">
-                      <AvatarFallback className="text-xs">
-                        {getInitials(profile?.full_name ?? user?.email)}
-                      </AvatarFallback>
-                    </Avatar>
+                    <AvatarWithCredits
+                      plan={org?.plan ?? 'essentiel'}
+                      usedCredits={dailyUsage ?? 0}
+                      size="sm"
+                    />
                     <div className="flex flex-col gap-0.5 text-left min-w-0 flex-1">
                       <span className="text-sm font-medium truncate leading-none">
                         {profile?.full_name ?? user?.email?.split('@')[0]}
